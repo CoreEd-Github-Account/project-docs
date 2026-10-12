@@ -65,7 +65,7 @@ export function Sidebar({
                 </h2>
                 <div className="flex items-center gap-1.5 mt-0.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                  <span className="text-[11px] text-slate-400">sqlite.db</span>
+                  <span className="text-[11px] text-slate-400">Supabase PG</span>
                 </div>
               </div>
             </div>
@@ -239,7 +239,7 @@ export function Sidebar({
           <div className="flex items-center justify-between">
             <span className="flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-              Database: sqlite.db
+              Database: Supabase PG
             </span>
             <span className="text-slate-500">v1.0</span>
           </div>

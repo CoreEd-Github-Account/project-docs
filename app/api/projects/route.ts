@@ -10,7 +10,7 @@ export async function GET() {
   }
 
   try {
-    const projects = getAllProjects();
+    const projects = await getAllProjects();
     return NextResponse.json(projects);
   } catch (error) {
     console.error("GET /api/projects error:", error);
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    saveProject(project);
+    await saveProject(project);
     return NextResponse.json({ success: true, project });
   } catch (error) {
     console.error("POST /api/projects error:", error);
@@ -61,7 +61,7 @@ export async function DELETE(request: Request) {
         { status: 400 }
       );
     }
-    deleteProject(id);
+    await deleteProject(id);
     return NextResponse.json({ success: true, id });
   } catch (error) {
     console.error("DELETE /api/projects error:", error);

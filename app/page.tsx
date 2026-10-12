@@ -31,7 +31,7 @@ export default function ProjectTemplateBuilder() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // Debounce timer ref for auto-saving project modifications to SQLite
+  // Debounce timer ref for auto-saving project modifications to Supabase
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // 1. Check Authentication Status on mount
@@ -54,7 +54,7 @@ export default function ProjectTemplateBuilder() {
     checkAuth();
   }, [checkAuth]);
 
-  // 2. Fetch projects from SQLite database
+  // 2. Fetch projects from Supabase database
   const fetchProjects = useCallback(async () => {
     try {
       setIsLoading(true);
@@ -70,7 +70,7 @@ export default function ProjectTemplateBuilder() {
         setActiveProjectId(data[0].id);
       }
     } catch (err) {
-      console.error("Error loading projects from SQLite:", err);
+      console.error("Error loading projects from Supabase:", err);
       setSaveStatus("error");
     } finally {
       setIsLoading(false);
@@ -100,7 +100,7 @@ export default function ProjectTemplateBuilder() {
   const activeProject =
     projects.find((p) => p.id === activeProjectId) || projects[0] || null;
 
-  // Persist project changes to SQLite via API
+  // Persist project changes to Supabase via API
   const persistProjectToDb = async (projectToSave: Project) => {
     try {
       setSaveStatus("saving");
@@ -116,7 +116,7 @@ export default function ProjectTemplateBuilder() {
       if (!res.ok) throw new Error("Failed to save project");
       setSaveStatus("saved");
     } catch (error) {
-      console.error("Failed to save project to SQLite:", error);
+      console.error("Failed to save project to Supabase:", error);
       setSaveStatus("error");
     }
   };
@@ -148,7 +148,7 @@ export default function ProjectTemplateBuilder() {
     setIsSidebarOpen(false);
     setActiveTab("builder");
 
-    // Persist immediately to SQLite
+    // Persist immediately to Supabase
     await persistProjectToDb(newProj);
   };
 
@@ -183,7 +183,7 @@ export default function ProjectTemplateBuilder() {
       }
       setSaveStatus("saved");
     } catch (error) {
-      console.error("Failed to delete project from SQLite:", error);
+      console.error("Failed to delete project from Supabase:", error);
       setSaveStatus("error");
     }
   };
@@ -373,7 +373,7 @@ export default function ProjectTemplateBuilder() {
           </span>
           <span
             className="w-2 h-2 rounded-full bg-emerald-400"
-            title="Connected to SQLite"
+            title="Connected to Supabase"
           />
         </div>
         <div className="flex items-center gap-2">
@@ -429,7 +429,7 @@ export default function ProjectTemplateBuilder() {
         {isLoading ? (
           <div className="flex flex-col items-center justify-center min-h-[400px] text-gray-500">
             <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-3"></div>
-            <p className="text-sm font-medium">Loading projects from SQLite...</p>
+            <p className="text-sm font-medium">Loading projects from Supabase...</p>
           </div>
         ) : activeProject ? (
           <div className="max-w-5xl mx-auto space-y-6">
@@ -525,7 +525,7 @@ export default function ProjectTemplateBuilder() {
                 )}
                 {saveStatus === "saved" && (
                   <span className="text-xs text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full font-medium border border-emerald-200">
-                    ✓ Saved to SQLite
+                    ✓ Saved to Supabase
                   </span>
                 )}
               </div>

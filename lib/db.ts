@@ -1,101 +1,129 @@
-import { DatabaseSync } from "node:sqlite";
-import path from "node:path";
-import fs from "node:fs";
-import type { Project } from "./types";
+import { Pool } from "pg";
+import type { Project, Section } from "./types";
 
-function getDatabasePath(): string {
-  const rootDbPath = path.join(process.cwd(), "sqlite.db");
-  // On Vercel serverless environments, the project root is read-only.
-  // /tmp is the writable filesystem in serverless functions.
-  if (process.env.VERCEL) {
-    const tmpDbPath = path.join("/tmp", "sqlite.db");
-    if (!fs.existsSync(tmpDbPath) && fs.existsSync(rootDbPath)) {
-      try {
-        fs.copyFileSync(rootDbPath, tmpDbPath);
-      } catch (err) {
-        console.error("Failed to copy sqlite.db to /tmp:", err);
+let poolInstance: Pool | null = null;
+let initialized = false;
+
+function resolveConnectionString(raw: string): string {
+  try {
+    const url = new URL(raw);
+    if (url.hostname.startsWith("db.") && url.hostname.endsWith(".supabase.co")) {
+      const projectRef = url.hostname.split(".")[1];
+      url.hostname = "aws-0-ap-southeast-2.pooler.supabase.com";
+      if (!url.username.includes(".")) {
+        url.username = `${url.username}.${projectRef}`;
       }
+      return url.toString();
     }
-    return tmpDbPath;
+  } catch {
+    // If raw string has unencoded characters like @ in password
+    const match = raw.match(/@db\.([a-z0-9]+)\.supabase\.co/);
+    if (match) {
+      const projectRef = match[1];
+      return raw
+        .replace(
+          `@db.${projectRef}.supabase.co`,
+          `@aws-0-ap-southeast-2.pooler.supabase.com`
+        )
+        .replace("postgres:", `postgres.${projectRef}:`);
+    }
   }
-  return rootDbPath;
+  return raw;
 }
 
-let dbInstance: DatabaseSync | null = null;
-
-export function getDatabase(): DatabaseSync {
-  if (!dbInstance) {
-    const dbPath = getDatabasePath();
-    dbInstance = new DatabaseSync(dbPath);
-    dbInstance.exec(`
-      CREATE TABLE IF NOT EXISTS projects (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        createdAt INTEGER NOT NULL,
-        sections TEXT NOT NULL,
-        tasks TEXT DEFAULT ''
-      );
-    `);
-
-    // Safely migrate existing databases if tasks column does not exist yet
-    try {
-      dbInstance.exec(`ALTER TABLE projects ADD COLUMN tasks TEXT DEFAULT '';`);
-    } catch {
-      // Column already exists
+export function getPool(): Pool {
+  if (!poolInstance) {
+    const rawConnectionString = process.env.DATABASE_URL;
+    if (!rawConnectionString) {
+      throw new Error("DATABASE_URL environment variable is missing.");
     }
 
-    // Clean up any legacy V3C records if present
-    dbInstance.exec(`
-      DELETE FROM projects WHERE id = 'default-v3c' OR name = 'V3C';
-    `);
+    const connectionString = resolveConnectionString(rawConnectionString);
+
+    poolInstance = new Pool({
+      connectionString,
+      ssl: {
+        rejectUnauthorized: false,
+      },
+    });
   }
-  return dbInstance;
+  return poolInstance;
 }
 
-export function getAllProjects(): Project[] {
-  const db = getDatabase();
-  const rows = db
-    .prepare(
-      "SELECT id, name, createdAt, sections, tasks FROM projects ORDER BY createdAt DESC"
-    )
-    .all() as Array<{
+export async function ensureTableExists(): Promise<void> {
+  if (initialized) return;
+  const pool = getPool();
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS projects (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      created_at BIGINT NOT NULL,
+      sections JSONB NOT NULL DEFAULT '[]'::jsonb,
+      tasks TEXT DEFAULT ''
+    );
+  `);
+  initialized = true;
+}
+
+export async function getAllProjects(): Promise<Project[]> {
+  await ensureTableExists();
+  const pool = getPool();
+  const { rows } = await pool.query<{
     id: string;
     name: string;
-    createdAt: number;
-    sections: string;
-    tasks?: string | null;
-  }>;
+    created_at: string | number;
+    sections: unknown;
+    tasks: string | null;
+  }>(
+    "SELECT id, name, created_at, sections, tasks FROM projects ORDER BY created_at DESC"
+  );
 
-  return rows.map((row) => ({
-    id: row.id,
-    name: row.name,
-    createdAt: row.createdAt,
-    sections: JSON.parse(row.sections || "[]"),
-    tasks: row.tasks ?? "",
-  }));
+  return rows.map((row) => {
+    let parsedSections: Section[] = [];
+    if (Array.isArray(row.sections)) {
+      parsedSections = row.sections as Section[];
+    } else if (typeof row.sections === "string") {
+      try {
+        parsedSections = JSON.parse(row.sections);
+      } catch {
+        parsedSections = [];
+      }
+    }
+
+    return {
+      id: row.id,
+      name: row.name,
+      createdAt: Number(row.created_at) || Date.now(),
+      sections: parsedSections,
+      tasks: row.tasks ?? "",
+    };
+  });
 }
 
-export function saveProject(project: Project): void {
-  const db = getDatabase();
-  const stmt = db.prepare(`
-    INSERT INTO projects (id, name, createdAt, sections, tasks)
-    VALUES (?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET
-      name = excluded.name,
-      sections = excluded.sections,
-      tasks = excluded.tasks
-  `);
-  stmt.run(
-    project.id,
-    project.name,
-    project.createdAt,
-    JSON.stringify(project.sections),
-    project.tasks || ""
+export async function saveProject(project: Project): Promise<void> {
+  await ensureTableExists();
+  const pool = getPool();
+  await pool.query(
+    `
+    INSERT INTO projects (id, name, created_at, sections, tasks)
+    VALUES ($1, $2, $3, $4::jsonb, $5)
+    ON CONFLICT (id) DO UPDATE SET
+      name = EXCLUDED.name,
+      sections = EXCLUDED.sections,
+      tasks = EXCLUDED.tasks
+  `,
+    [
+      project.id,
+      project.name,
+      project.createdAt,
+      JSON.stringify(project.sections || []),
+      project.tasks || "",
+    ]
   );
 }
 
-export function deleteProject(id: string): void {
-  const db = getDatabase();
-  const stmt = db.prepare("DELETE FROM projects WHERE id = ?");
-  stmt.run(id);
+export async function deleteProject(id: string): Promise<void> {
+  await ensureTableExists();
+  const pool = getPool();
+  await pool.query("DELETE FROM projects WHERE id = $1", [id]);
 }
