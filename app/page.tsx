@@ -5,6 +5,7 @@ import type { Project, Section } from "@/lib/types";
 import { Sidebar } from "@/components/Sidebar";
 import { TemplateEditor } from "@/components/TemplateEditor";
 import { LivePreview } from "@/components/LivePreview";
+import { TaskNotepad } from "@/components/TaskNotepad";
 import { LoginForm } from "@/components/LoginForm";
 
 const MY_TEMPLATE_HEADINGS = [
@@ -18,7 +19,9 @@ export default function ProjectTemplateBuilder() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<string>("");
-  const [activeTab, setActiveTab] = useState<"builder" | "preview">("builder");
+  const [activeTab, setActiveTab] = useState<
+    "builder" | "preview" | "tasks"
+  >("builder");
   const [searchQuery, setSearchQuery] = useState("");
   const [newHeading, setNewHeading] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -264,6 +267,20 @@ export default function ProjectTemplateBuilder() {
     triggerDebouncedSave(updated);
   };
 
+  const updateActiveProjectTasks = (tasks: string) => {
+    if (!activeProject) return;
+    const updated = { ...activeProject, tasks };
+    setProjects((prev) =>
+      prev.map((p) => (p.id === activeProject.id ? updated : p))
+    );
+    triggerDebouncedSave(updated);
+  };
+
+  const handleManualSaveTasks = () => {
+    if (!activeProject) return;
+    persistProjectToDb(activeProject);
+  };
+
   // Text generator & export
   const generateText = () => {
     if (!activeProject) return "";
@@ -471,6 +488,29 @@ export default function ProjectTemplateBuilder() {
                   </svg>
                   <span>Live Preview</span>
                 </button>
+                <button
+                  onClick={() => setActiveTab("tasks")}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold transition cursor-pointer ${
+                    activeTab === "tasks"
+                      ? "bg-blue-600 text-white shadow-sm"
+                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/60"
+                  }`}
+                >
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
+                    />
+                  </svg>
+                  <span>Tasks</span>
+                </button>
               </div>
 
               <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
@@ -513,6 +553,16 @@ export default function ProjectTemplateBuilder() {
                 onCopy={handleCopy}
                 onDownload={handleDownload}
                 copied={copied}
+              />
+            )}
+
+            {/* VIEW 3: TASKS NOTEPAD */}
+            {activeTab === "tasks" && (
+              <TaskNotepad
+                project={activeProject}
+                onUpdateTasks={updateActiveProjectTasks}
+                onManualSave={handleManualSaveTasks}
+                saveStatus={saveStatus}
               />
             )}
           </div>

@@ -32,9 +32,17 @@ export function getDatabase(): DatabaseSync {
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         createdAt INTEGER NOT NULL,
-        sections TEXT NOT NULL
+        sections TEXT NOT NULL,
+        tasks TEXT DEFAULT ''
       );
     `);
+
+    // Safely migrate existing databases if tasks column does not exist yet
+    try {
+      dbInstance.exec(`ALTER TABLE projects ADD COLUMN tasks TEXT DEFAULT '';`);
+    } catch {
+      // Column already exists
+    }
 
     // Clean up any legacy V3C records if present
     dbInstance.exec(`
@@ -48,13 +56,14 @@ export function getAllProjects(): Project[] {
   const db = getDatabase();
   const rows = db
     .prepare(
-      "SELECT id, name, createdAt, sections FROM projects ORDER BY createdAt DESC"
+      "SELECT id, name, createdAt, sections, tasks FROM projects ORDER BY createdAt DESC"
     )
     .all() as Array<{
     id: string;
     name: string;
     createdAt: number;
     sections: string;
+    tasks?: string | null;
   }>;
 
   return rows.map((row) => ({
@@ -62,23 +71,26 @@ export function getAllProjects(): Project[] {
     name: row.name,
     createdAt: row.createdAt,
     sections: JSON.parse(row.sections || "[]"),
+    tasks: row.tasks ?? "",
   }));
 }
 
 export function saveProject(project: Project): void {
   const db = getDatabase();
   const stmt = db.prepare(`
-    INSERT INTO projects (id, name, createdAt, sections)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO projects (id, name, createdAt, sections, tasks)
+    VALUES (?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       name = excluded.name,
-      sections = excluded.sections
+      sections = excluded.sections,
+      tasks = excluded.tasks
   `);
   stmt.run(
     project.id,
     project.name,
     project.createdAt,
-    JSON.stringify(project.sections)
+    JSON.stringify(project.sections),
+    project.tasks || ""
   );
 }
 

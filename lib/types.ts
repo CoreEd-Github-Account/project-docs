@@ -9,4 +9,5 @@ export interface Project {
   name: string;
   createdAt: number;
   sections: Section[];
+  tasks?: string;
 }
