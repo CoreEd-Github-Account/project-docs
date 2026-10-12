@@ -1,9 +1,14 @@
 import { NextResponse } from "next/server";
 import { getAllProjects, saveProject, deleteProject } from "@/lib/db";
+import { isServerAuthenticated } from "@/lib/auth";
 import type { Project } from "@/lib/types";
 
-
 export async function GET() {
+  const authenticated = await isServerAuthenticated();
+  if (!authenticated) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const projects = getAllProjects();
     return NextResponse.json(projects);
@@ -17,6 +22,11 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const authenticated = await isServerAuthenticated();
+  if (!authenticated) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const project: Project = await request.json();
     if (!project || !project.id || !project.name) {
@@ -37,6 +47,11 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const authenticated = await isServerAuthenticated();
+  if (!authenticated) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");

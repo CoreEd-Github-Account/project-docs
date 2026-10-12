@@ -5,6 +5,7 @@ import type { Project, Section } from "@/lib/types";
 import { Sidebar } from "@/components/Sidebar";
 import { TemplateEditor } from "@/components/TemplateEditor";
 import { LivePreview } from "@/components/LivePreview";
+import { LoginForm } from "@/components/LoginForm";
 
 const MY_TEMPLATE_HEADINGS = [
   "PORT",
@@ -14,6 +15,7 @@ const MY_TEMPLATE_HEADINGS = [
 ];
 
 export default function ProjectTemplateBuilder() {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<string>("");
   const [activeTab, setActiveTab] = useState<"builder" | "preview">("builder");
@@ -29,11 +31,35 @@ export default function ProjectTemplateBuilder() {
   // Debounce timer ref for auto-saving project modifications to SQLite
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // 1. Fetch projects from SQLite database on mount
+  // 1. Check Authentication Status on mount
+  const checkAuth = useCallback(async () => {
+    try {
+      const res = await fetch("/api/auth");
+      const data = await res.json();
+      if (data.authenticated) {
+        setIsAuthenticated(true);
+      } else {
+        setIsAuthenticated(false);
+      }
+    } catch (err) {
+      console.error("Auth check error:", err);
+      setIsAuthenticated(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    checkAuth();
+  }, [checkAuth]);
+
+  // 2. Fetch projects from SQLite database
   const fetchProjects = useCallback(async () => {
     try {
       setIsLoading(true);
       const res = await fetch("/api/projects");
+      if (res.status === 401) {
+        setIsAuthenticated(false);
+        return;
+      }
       if (!res.ok) throw new Error("Failed to fetch projects");
       const data: Project[] = await res.json();
       setProjects(data);
@@ -49,8 +75,23 @@ export default function ProjectTemplateBuilder() {
   }, []);
 
   useEffect(() => {
-    fetchProjects();
-  }, [fetchProjects]);
+    if (isAuthenticated) {
+      fetchProjects();
+    }
+  }, [isAuthenticated, fetchProjects]);
+
+  // Handle Logout
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/auth", { method: "DELETE" });
+    } catch (err) {
+      console.error("Logout error:", err);
+    } finally {
+      setIsAuthenticated(false);
+      setProjects([]);
+      setActiveProjectId("");
+    }
+  };
 
   // Current active project lookup
   const activeProject =
@@ -65,6 +106,10 @@ export default function ProjectTemplateBuilder() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(projectToSave),
       });
+      if (res.status === 401) {
+        setIsAuthenticated(false);
+        return;
+      }
       if (!res.ok) throw new Error("Failed to save project");
       setSaveStatus("saved");
     } catch (error) {
@@ -122,6 +167,10 @@ export default function ProjectTemplateBuilder() {
           method: "DELETE",
         }
       );
+      if (res.status === 401) {
+        setIsAuthenticated(false);
+        return;
+      }
       if (!res.ok) throw new Error("Failed to delete project");
 
       const remaining = projects.filter((p) => p.id !== projectToDelete.id);
@@ -166,7 +215,7 @@ export default function ProjectTemplateBuilder() {
     triggerDebouncedSave(updated);
   };
 
-  // "My Template" Quick Presets: PORT, Live URL, Admin Credentials, Build Command
+  // "My Template" Quick Presets
   const applyMyTemplate = () => {
     if (!activeProject) return;
     const now = Date.now();
@@ -247,6 +296,28 @@ export default function ProjectTemplateBuilder() {
     document.body.removeChild(element);
   };
 
+  // 1. Initial Checking Auth State
+  if (isAuthenticated === null) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-400">
+        <div className="w-9 h-9 border-3 border-blue-500 border-t-transparent rounded-full animate-spin mb-3"></div>
+        <p className="text-sm font-medium">Verifying access...</p>
+      </div>
+    );
+  }
+
+  // 2. Unauthenticated -> Show Login Form
+  if (!isAuthenticated) {
+    return (
+      <LoginForm
+        onLoginSuccess={() => {
+          setIsAuthenticated(true);
+        }}
+      />
+    );
+  }
+
+  // 3. Authenticated -> Render Workspace
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col md:flex-row text-gray-800 font-sans">
       {/* Mobile Header Bar */}
@@ -288,12 +359,33 @@ export default function ProjectTemplateBuilder() {
             title="Connected to SQLite"
           />
         </div>
-        <button
-          onClick={handleCreateProject}
-          className="px-3 py-1.5 bg-blue-600 rounded-md text-xs font-medium hover:bg-blue-500 transition cursor-pointer"
-        >
-          + New
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleCreateProject}
+            className="px-3 py-1.5 bg-blue-600 rounded-md text-xs font-medium hover:bg-blue-500 transition cursor-pointer"
+          >
+            + New
+          </button>
+          <button
+            onClick={handleLogout}
+            title="Log Out"
+            className="p-1.5 bg-slate-800 text-slate-300 hover:text-red-400 rounded-md text-xs transition cursor-pointer"
+          >
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+              />
+            </svg>
+          </button>
+        </div>
       </div>
 
       {/* LEFT SIDEBAR COMPONENT */}
@@ -312,6 +404,7 @@ export default function ProjectTemplateBuilder() {
         }}
         onCreateProject={handleCreateProject}
         onDeleteProject={handleDeleteProject}
+        onLogout={handleLogout}
       />
 
       {/* RIGHT SIDE: Main Content Workspace */}
@@ -398,7 +491,7 @@ export default function ProjectTemplateBuilder() {
               </div>
             </div>
 
-            {/* VIEW 1: TEMPLATE BUILDER (Only shown when activeTab === 'builder') */}
+            {/* VIEW 1: TEMPLATE BUILDER */}
             {activeTab === "builder" && (
               <TemplateEditor
                 project={activeProject}
@@ -412,7 +505,7 @@ export default function ProjectTemplateBuilder() {
               />
             )}
 
-            {/* VIEW 2: LIVE PREVIEW (Only shown when activeTab === 'preview') */}
+            {/* VIEW 2: LIVE PREVIEW */}
             {activeTab === "preview" && (
               <LivePreview
                 projectName={activeProject.name}

@@ -15,6 +15,7 @@ interface SidebarProps {
   onSelectProject: (id: string) => void;
   onCreateProject: () => void;
   onDeleteProject: (e: React.MouseEvent, project: Project) => void;
+  onLogout: () => void;
 }
 
 export function Sidebar({
@@ -29,6 +30,7 @@ export function Sidebar({
   onSelectProject,
   onCreateProject,
   onDeleteProject,
+  onLogout,
 }: SidebarProps) {
   const filteredProjects = projects.filter((p) =>
     p.name.toLowerCase().includes(searchQuery.toLowerCase().trim())
@@ -232,13 +234,36 @@ export function Sidebar({
           )}
         </div>
 
-        {/* Footer info */}
-        <div className="p-3 border-t border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
-          <span className="flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-            Database: sqlite.db
-          </span>
-          <span className="text-slate-500">v1.0</span>
+        {/* Footer info & Logout */}
+        <div className="p-3 border-t border-slate-800 text-[11px] text-slate-400 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+              Database: sqlite.db
+            </span>
+            <span className="text-slate-500">v1.0</span>
+          </div>
+
+          <button
+            onClick={onLogout}
+            title="Log out of Template Studio"
+            className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 bg-slate-800/80 hover:bg-slate-800 hover:text-red-400 text-slate-300 rounded-md transition text-xs font-medium cursor-pointer"
+          >
+            <svg
+              className="w-3.5 h-3.5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+              />
+            </svg>
+            <span>Log Out</span>
+          </button>
         </div>
       </aside>
     </>
