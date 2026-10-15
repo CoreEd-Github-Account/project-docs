@@ -18,28 +18,28 @@ export function LivePreview({
   copied,
 }: LivePreviewProps) {
   return (
-    <div className="bg-gray-900 text-gray-100 p-6 sm:p-8 rounded-xl shadow-lg flex flex-col min-h-[650px] border border-gray-800 space-y-4">
-      <div className="flex flex-wrap gap-3 justify-between items-center pb-4 border-b border-gray-800">
+    <div className="bg-slate-900 text-slate-100 p-6 sm:p-8 rounded-xl shadow-md flex flex-col min-h-[650px] border border-slate-800 space-y-4">
+      <div className="flex flex-wrap gap-3 justify-between items-center pb-4 border-b border-slate-800">
         <div>
-          <h2 className="text-xl font-bold flex items-center gap-2">
+          <h2 className="text-xl font-bold flex items-center gap-2 text-white">
             <span>Live Preview</span>
             <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 font-normal border border-slate-700">
               {projectName}
             </span>
           </h2>
-          <p className="text-xs text-gray-400 mt-1">
+          <p className="text-xs text-slate-400 mt-1">
             Rendered template preview ready for copying or downloading.
           </p>
         </div>
         <div className="flex items-center gap-2.5">
           <button
             onClick={onCopy}
-            className="bg-gray-800 hover:bg-gray-700 border border-gray-700 px-4 py-2 rounded-lg text-sm transition font-medium flex items-center gap-1.5 cursor-pointer"
+            className="bg-slate-800 hover:bg-slate-700 border border-slate-700 px-4 py-2 rounded-lg text-sm transition font-medium flex items-center gap-1.5 cursor-pointer text-slate-200"
           >
             {copied ? (
               <>
                 <svg
-                  className="w-4 h-4 text-green-400"
+                  className="w-4 h-4 text-emerald-400"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -51,12 +51,12 @@ export function LivePreview({
                     d="M5 13l4 4L19 7"
                   />
                 </svg>
-                <span className="text-green-400">Copied!</span>
+                <span className="text-emerald-400 font-bold">Copied!</span>
               </>
             ) : (
               <>
                 <svg
-                  className="w-4 h-4 text-gray-400"
+                  className="w-4 h-4 text-slate-400"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -74,7 +74,7 @@ export function LivePreview({
           </button>
           <button
             onClick={onDownload}
-            className="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-lg text-sm transition font-medium flex items-center gap-1.5 shadow-sm active:scale-[0.98] cursor-pointer"
+            className="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-lg text-sm transition font-medium flex items-center gap-1.5 shadow-sm shadow-blue-600/30 active:scale-[0.98] cursor-pointer text-white"
           >
             <svg
               className="w-4 h-4"
@@ -94,7 +94,7 @@ export function LivePreview({
         </div>
       </div>
 
-      <pre className="flex-1 p-5 bg-gray-950 rounded-lg overflow-auto text-sm font-mono whitespace-pre-wrap leading-relaxed border border-gray-800/80 selection:bg-blue-900 selection:text-white min-h-[480px]">
+      <pre className="flex-1 p-5 bg-slate-950 rounded-lg overflow-auto text-sm font-mono whitespace-pre-wrap leading-relaxed border border-slate-800 selection:bg-blue-900 selection:text-white min-h-[480px] text-slate-200">
         {generatedText}
       </pre>
     </div>
