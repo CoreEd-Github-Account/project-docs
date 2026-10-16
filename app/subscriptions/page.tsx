@@ -12,6 +12,11 @@ export default function SubscriptionsPage() {
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [filter, setFilter] = useState<"all" | "urgent">("all");
+  const [currentTimestamp, setCurrentTimestamp] = useState<number | null>(null);
+
+  useEffect(() => {
+    setCurrentTimestamp(Date.now());
+  }, []);
 
   // Check auth
   const checkAuth = useCallback(async () => {
@@ -279,30 +284,33 @@ export default function SubscriptionsPage() {
     let urgentCount = 0;
     let urgentTotal = 0;
     let totalMonthly = 0;
-    const now = Date.now();
+    const now = currentTimestamp || 0;
 
     subscriptions.forEach((sub) => {
       totalMonthly += sub.amount;
-      const parts = sub.renewalDate.split("-").map(Number);
-      if (parts.length === 3) {
-        const target = new Date(parts[0], parts[1] - 1, parts[2], 23, 59, 59).getTime();
-        const diffDays = (target - now) / (1000 * 60 * 60 * 24);
-        if (diffDays <= 3) {
-          urgentCount++;
-          urgentTotal += sub.amount;
+      if (currentTimestamp) {
+        const parts = sub.renewalDate.split("-").map(Number);
+        if (parts.length === 3) {
+          const target = new Date(parts[0], parts[1] - 1, parts[2], 23, 59, 59).getTime();
+          const diffDays = (target - now) / (1000 * 60 * 60 * 24);
+          if (diffDays <= 3) {
+            urgentCount++;
+            urgentTotal += sub.amount;
+          }
         }
       }
     });
 
     return { urgentCount, urgentTotal, totalMonthly };
-  }, [subscriptions]);
+  }, [subscriptions, currentTimestamp]);
 
   // Filtered List
   const displayedSubs = useMemo(() => {
-    const now = Date.now();
+    const now = currentTimestamp || 0;
     return [...subscriptions]
       .filter((s) => {
         if (filter === "urgent") {
+          if (!currentTimestamp) return true;
           const parts = s.renewalDate.split("-").map(Number);
           if (parts.length === 3) {
             const target = new Date(parts[0], parts[1] - 1, parts[2], 23, 59, 59).getTime();
@@ -312,7 +320,7 @@ export default function SubscriptionsPage() {
         return true;
       })
       .sort((a, b) => a.renewalDate.localeCompare(b.renewalDate));
-  }, [subscriptions, filter]);
+  }, [subscriptions, filter, currentTimestamp]);
 
   // Auth loading state
   if (isAuthenticated === null) {

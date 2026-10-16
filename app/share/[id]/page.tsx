@@ -12,7 +12,7 @@ interface SharedLinkData {
   createdAt: string;
 }
 
-export default function SharedProjectPage({
+function SharedProjectContent({
   params,
 }: {
   params: Promise<{ id: string }>;
@@ -282,5 +282,23 @@ export default function SharedProjectPage({
         </div>
       </main>
     </div>
+  );
+}
+
+export default function SharedProjectPage(props: {
+  params: Promise<{ id: string }>;
+}) {
+  return (
+    <React.Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-400 p-4">
+          <div className="w-10 h-10 border-3 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+          <p className="text-sm font-medium text-slate-300">Loading shared project preview...</p>
+          <span className="text-xs text-slate-500 mt-1">Verifying expiration timer</span>
+        </div>
+      }
+    >
+      <SharedProjectContent params={props.params} />
+    </React.Suspense>
   );
 }
