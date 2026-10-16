@@ -1,16 +1,16 @@
 import { NextResponse } from "next/server";
 import { getAllProjects, saveProject, deleteProject } from "@/lib/db";
-import { isServerAuthenticated } from "@/lib/auth";
+import { getAuthenticatedUser } from "@/lib/auth";
 import type { Project } from "@/lib/types";
 
 export async function GET() {
-  const authenticated = await isServerAuthenticated();
-  if (!authenticated) {
+  const auth = await getAuthenticatedUser();
+  if (!auth.authenticated || !auth.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
-    const projects = await getAllProjects();
+    const projects = await getAllProjects(auth.user.id);
     return NextResponse.json(projects);
   } catch (error) {
     console.error("GET /api/projects error:", error);
@@ -22,8 +22,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const authenticated = await isServerAuthenticated();
-  if (!authenticated) {
+  const auth = await getAuthenticatedUser();
+  if (!auth.authenticated || !auth.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    await saveProject(project);
+    await saveProject(project, auth.user.id);
     return NextResponse.json({ success: true, project });
   } catch (error) {
     console.error("POST /api/projects error:", error);
@@ -47,8 +47,8 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const authenticated = await isServerAuthenticated();
-  if (!authenticated) {
+  const auth = await getAuthenticatedUser();
+  if (!auth.authenticated || !auth.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -61,7 +61,7 @@ export async function DELETE(request: Request) {
         { status: 400 }
       );
     }
-    await deleteProject(id);
+    await deleteProject(id, auth.user.id);
     return NextResponse.json({ success: true, id });
   } catch (error) {
     console.error("DELETE /api/projects error:", error);

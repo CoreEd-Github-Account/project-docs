@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import type { Project } from "@/lib/types";
 
 interface TemplateEditorProps {
@@ -11,6 +11,7 @@ interface TemplateEditorProps {
   onAddSection: () => void;
   onRemoveSection: (id: number) => void;
   onUpdateSectionContent: (id: number, content: string) => void;
+  onUpdateSectionHeading: (id: number, heading: string) => void;
   onApplyMyTemplate: () => void;
 }
 
@@ -22,8 +23,29 @@ export function TemplateEditor({
   onAddSection,
   onRemoveSection,
   onUpdateSectionContent,
+  onUpdateSectionHeading,
   onApplyMyTemplate,
 }: TemplateEditorProps) {
+  const [editingHeadingId, setEditingHeadingId] = useState<number | null>(null);
+  const [tempHeadingText, setTempHeadingText] = useState("");
+
+  const startEditingHeading = (id: number, currentHeading: string) => {
+    setEditingHeadingId(id);
+    setTempHeadingText(currentHeading);
+  };
+
+  const saveEditingHeading = (id: number) => {
+    if (tempHeadingText.trim()) {
+      onUpdateSectionHeading(id, tempHeadingText.trim());
+    }
+    setEditingHeadingId(null);
+  };
+
+  const cancelEditingHeading = () => {
+    setEditingHeadingId(null);
+    setTempHeadingText("");
+  };
+
   return (
     <div className="bg-slate-900 p-6 sm:p-8 rounded-xl shadow-md border border-slate-800 space-y-6">
       <div className="border-b border-slate-800 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -127,9 +149,97 @@ export function TemplateEditor({
               className="border-l-4 border-blue-500 pl-4 bg-slate-950/80 p-4 rounded-r-lg border-y border-r border-slate-800 space-y-2.5"
             >
               <div className="flex items-center justify-between">
-                <h3 className="font-bold text-white text-base">
-                  {sec.heading}
-                </h3>
+                {editingHeadingId === sec.id ? (
+                  <div className="flex items-center gap-1.5 flex-1 max-w-sm mr-2">
+                    <input
+                      type="text"
+                      autoFocus
+                      value={tempHeadingText}
+                      onChange={(e) => setTempHeadingText(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          saveEditingHeading(sec.id);
+                        } else if (e.key === "Escape") {
+                          cancelEditingHeading();
+                        }
+                      }}
+                      className="w-full bg-slate-900 border border-blue-500 px-2.5 py-1 rounded text-sm text-white font-bold outline-none focus:ring-1 focus:ring-blue-400"
+                      placeholder="Heading name..."
+                    />
+                    <button
+                      type="button"
+                      onClick={() => saveEditingHeading(sec.id)}
+                      title="Save heading"
+                      className="p-1 text-emerald-400 hover:text-emerald-300 hover:bg-slate-800 rounded transition cursor-pointer"
+                    >
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M5 13l4 4L19 7"
+                        />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={cancelEditingHeading}
+                      title="Cancel"
+                      className="p-1 text-slate-400 hover:text-slate-300 hover:bg-slate-800 rounded transition cursor-pointer"
+                    >
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M6 18L18 6M6 6l12 12"
+                        />
+                      </svg>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 group">
+                    <h3
+                      onClick={() => startEditingHeading(sec.id, sec.heading)}
+                      className="font-bold text-white text-base cursor-pointer hover:text-blue-400 transition"
+                      title="Click to edit heading"
+                    >
+                      {sec.heading}
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => startEditingHeading(sec.id, sec.heading)}
+                      title="Edit heading"
+                      className="text-slate-400 hover:text-blue-400 p-1 rounded transition cursor-pointer"
+                    >
+                      <svg
+                        className="w-3.5 h-3.5"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                        />
+                      </svg>
+                    </button>
+                  </div>
+                )}
+
                 <button
                   onClick={() => onRemoveSection(sec.id)}
                   title="Remove section"

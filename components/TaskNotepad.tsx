@@ -7,7 +7,7 @@ interface TaskNotepadProps {
   project: Project;
   onUpdateTasks: (tasks: string) => void;
   onManualSave?: () => void;
-  saveStatus: "saved" | "saving" | "error";
+  saveStatus: "saved" | "unsaved" | "saving" | "error";
 }
 
 export function TaskNotepad({
@@ -269,14 +269,19 @@ Example:
           </div>
 
           <div className="flex items-center gap-3">
+            {saveStatus === "unsaved" && (
+              <span className="text-amber-400 bg-amber-950/40 px-2 py-0.5 rounded font-medium flex items-center gap-1.5 border border-amber-500/30">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span> Unsaved changes
+              </span>
+            )}
             {saveStatus === "saving" && (
               <span className="text-amber-400 bg-amber-950/40 px-2 py-0.5 rounded font-medium flex items-center gap-1.5 border border-amber-500/30">
-                <span className="animate-spin text-xs">⟳</span> Auto-saving to database...
+                <span className="animate-spin text-xs">⟳</span> Saving to database...
               </span>
             )}
             {saveStatus === "saved" && (
               <span className="text-emerald-400 bg-emerald-950/40 px-2 py-0.5 rounded font-medium flex items-center gap-1 border border-emerald-500/30">
-                ✓ Auto-saved to database
+                ✓ Saved to database
               </span>
             )}
             {saveStatus === "error" && (

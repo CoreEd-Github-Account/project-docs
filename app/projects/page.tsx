@@ -7,6 +7,7 @@ import { TemplateEditor } from "@/components/TemplateEditor";
 import { LivePreview } from "@/components/LivePreview";
 import { TaskNotepad } from "@/components/TaskNotepad";
 import { LoginForm } from "@/components/LoginForm";
+import { ShareModal } from "@/components/ShareModal";
 import Link from "next/link";
 
 const MY_TEMPLATE_HEADINGS = [
@@ -26,14 +27,12 @@ export default function ProjectTemplateBuilder() {
   const [searchQuery, setSearchQuery] = useState("");
   const [newHeading, setNewHeading] = useState("");
   const [isLoading, setIsLoading] = useState(true);
-  const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "error">(
-    "saved"
-  );
+  const [saveStatus, setSaveStatus] = useState<
+    "saved" | "unsaved" | "saving" | "error"
+  >("saved");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [copied, setCopied] = useState(false);
-
-  // Debounce timer ref for auto-saving project modifications to Supabase
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
   // 1. Check Authentication Status on mount
   const checkAuth = useCallback(async () => {
@@ -123,16 +122,25 @@ export default function ProjectTemplateBuilder() {
     }
   };
 
-  // Schedule debounced save for live typing/edits
-  const triggerDebouncedSave = (updatedProject: Project) => {
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-    }
-    setSaveStatus("saving");
-    saveTimeoutRef.current = setTimeout(() => {
-      persistProjectToDb(updatedProject);
-    }, 400);
+  // Manual Save Active Project to Database
+  const handleSaveActiveProject = async () => {
+    if (!activeProject) return;
+    await persistProjectToDb(activeProject);
   };
+
+  // Keyboard shortcut Ctrl+S / Cmd+S to save
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        if (activeProject) {
+          persistProjectToDb(activeProject);
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [activeProject]);
 
   // Project Actions
   const handleCreateProject = async () => {
@@ -196,7 +204,7 @@ export default function ProjectTemplateBuilder() {
     setProjects((prev) =>
       prev.map((p) => (p.id === activeProject.id ? updated : p))
     );
-    triggerDebouncedSave(updated);
+    setSaveStatus("unsaved");
   };
 
   // Section Actions
@@ -217,7 +225,7 @@ export default function ProjectTemplateBuilder() {
       prev.map((p) => (p.id === activeProject.id ? updated : p))
     );
     setNewHeading("");
-    triggerDebouncedSave(updated);
+    setSaveStatus("unsaved");
   };
 
   // "My Template" Quick Presets
@@ -238,7 +246,7 @@ export default function ProjectTemplateBuilder() {
     setProjects((prev) =>
       prev.map((p) => (p.id === activeProject.id ? updated : p))
     );
-    triggerDebouncedSave(updated);
+    setSaveStatus("unsaved");
   };
 
   const removeSection = (sectionId: number) => {
@@ -251,7 +259,7 @@ export default function ProjectTemplateBuilder() {
     setProjects((prev) =>
       prev.map((p) => (p.id === activeProject.id ? updated : p))
     );
-    triggerDebouncedSave(updated);
+    setSaveStatus("unsaved");
   };
 
   const updateSectionContent = (sectionId: number, content: string) => {
@@ -266,7 +274,22 @@ export default function ProjectTemplateBuilder() {
     setProjects((prev) =>
       prev.map((p) => (p.id === activeProject.id ? updated : p))
     );
-    triggerDebouncedSave(updated);
+    setSaveStatus("unsaved");
+  };
+
+  const updateSectionHeading = (sectionId: number, heading: string) => {
+    if (!activeProject) return;
+    const updated = {
+      ...activeProject,
+      sections: activeProject.sections.map((sec) =>
+        sec.id === sectionId ? { ...sec, heading } : sec
+      ),
+    };
+
+    setProjects((prev) =>
+      prev.map((p) => (p.id === activeProject.id ? updated : p))
+    );
+    setSaveStatus("unsaved");
   };
 
   const updateActiveProjectTasks = (tasks: string) => {
@@ -275,7 +298,7 @@ export default function ProjectTemplateBuilder() {
     setProjects((prev) =>
       prev.map((p) => (p.id === activeProject.id ? updated : p))
     );
-    triggerDebouncedSave(updated);
+    setSaveStatus("unsaved");
   };
 
   const handleManualSaveTasks = () => {
@@ -338,7 +361,7 @@ export default function ProjectTemplateBuilder() {
 
   // 3. Authenticated -> Render Workspace
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col md:flex-row text-slate-100 font-sans">
+    <div className="min-h-screen md:h-screen md:overflow-hidden bg-slate-950 flex flex-col md:flex-row text-slate-100 font-sans">
       {/* Mobile Header Bar */}
       <div className="md:hidden flex items-center justify-between p-4 bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-30">
         <button
@@ -385,13 +408,6 @@ export default function ProjectTemplateBuilder() {
             className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 rounded-md text-xs font-medium transition"
           >
             Hub
-          </Link>
-          <Link
-            href="/subscriptions"
-            title="Subscription & Bank Balance Manager"
-            className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 rounded-md text-xs font-medium transition"
-          >
-            Subs
           </Link>
           <button
             onClick={handleCreateProject}
@@ -529,46 +545,72 @@ export default function ProjectTemplateBuilder() {
                 </button>
               </div>
 
-              <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
+              <div className="flex items-center gap-2.5 w-full sm:w-auto justify-between sm:justify-end flex-wrap">
                 <Link
                   href="/"
-                  className="flex items-center gap-1.5 px-3 py-1 bg-slate-800/80 hover:bg-slate-800 text-slate-200 border border-slate-700 rounded-lg text-xs font-medium transition shadow-sm"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800/80 hover:bg-slate-800 text-slate-200 border border-slate-700 rounded-lg text-sm font-medium transition shadow-sm cursor-pointer"
                   title="Back to Navigation Hub"
                 >
                   <span>←</span>
                   <span>Hub</span>
                 </Link>
-                <Link
-                  href="/subscriptions"
-                  className="flex items-center gap-1.5 px-3 py-1 bg-slate-800/80 hover:bg-slate-800 text-slate-200 border border-slate-700 rounded-lg text-xs font-medium transition shadow-sm"
-                  title="Subscription Expiration & Renewal Manager"
-                >
-                  <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                  <span>Subscriptions</span>
-                </Link>
-                <Link
-                  href="/passwords"
-                  className="flex items-center gap-1.5 px-3 py-1 bg-slate-800/80 hover:bg-slate-800 text-slate-200 border border-slate-700 rounded-lg text-xs font-medium transition shadow-sm"
-                  title="Password Manager"
-                >
-                  <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                  <span>Passwords</span>
-                </Link>
 
-                <span className="text-xs px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 border border-slate-700 font-medium truncate max-w-[150px]">
-                  Project: {activeProject.name}
-                </span>
+                <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white shadow-sm">
+                  <span className="text-sm font-medium text-slate-400">Project:</span>
+                  <span className="text-sm sm:text-base font-bold text-white tracking-wide">
+                    {activeProject.name || "Untitled"}
+                  </span>
+                </div>
 
-                {saveStatus === "saving" && (
-                  <span className="text-xs text-amber-400 bg-amber-950/40 px-2.5 py-1 rounded-full font-medium flex items-center gap-1 border border-amber-500/30">
-                    <span className="animate-spin text-xs">⟳</span> Saving...
-                  </span>
-                )}
-                {saveStatus === "saved" && (
-                  <span className="text-xs text-emerald-400 bg-emerald-950/40 px-2.5 py-1 rounded-full font-medium border border-emerald-500/30">
-                    ✓ Saved to Supabase
-                  </span>
-                )}
+                {/* MANUAL SAVE BUTTON */}
+                <button
+                  onClick={handleSaveActiveProject}
+                  disabled={saveStatus === "saving"}
+                  title="Save current project to database (Ctrl+S)"
+                  className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition cursor-pointer active:scale-95 shadow-sm ${
+                    saveStatus === "saving"
+                      ? "bg-slate-800 text-slate-400 border border-slate-700 cursor-not-allowed"
+                      : saveStatus === "unsaved"
+                      ? "bg-blue-600 hover:bg-blue-500 text-white shadow-blue-600/30 ring-2 ring-blue-400/50"
+                      : saveStatus === "error"
+                      ? "bg-rose-900/80 hover:bg-rose-800 text-rose-200 border border-rose-500/40"
+                      : "bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-slate-700"
+                  }`}
+                >
+                  {saveStatus === "saving" ? (
+                    <>
+                      <span className="animate-spin text-xs">⟳</span>
+                      <span>Saving...</span>
+                    </>
+                  ) : saveStatus === "unsaved" ? (
+                    <>
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"
+                        />
+                      </svg>
+                      <span>Save Changes</span>
+                    </>
+                  ) : saveStatus === "error" ? (
+                    <>
+                      <span>⚠</span>
+                      <span>Retry Save</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-emerald-400">✓</span>
+                      <span className="text-slate-200">Saved</span>
+                    </>
+                  )}
+                </button>
               </div>
             </div>
 
@@ -582,6 +624,7 @@ export default function ProjectTemplateBuilder() {
                 onAddSection={addSection}
                 onRemoveSection={removeSection}
                 onUpdateSectionContent={updateSectionContent}
+                onUpdateSectionHeading={updateSectionHeading}
                 onApplyMyTemplate={applyMyTemplate}
               />
             )}
@@ -593,9 +636,19 @@ export default function ProjectTemplateBuilder() {
                 generatedText={generateText()}
                 onCopy={handleCopy}
                 onDownload={handleDownload}
+                onShare={() => setIsShareModalOpen(true)}
                 copied={copied}
               />
             )}
+
+            {/* SHARE MODAL */}
+            <ShareModal
+              isOpen={isShareModalOpen}
+              onClose={() => setIsShareModalOpen(false)}
+              projectId={activeProject.id}
+              projectName={activeProject.name}
+              content={generateText()}
+            />
 
             {/* VIEW 3: TASKS NOTEPAD */}
             {activeTab === "tasks" && (

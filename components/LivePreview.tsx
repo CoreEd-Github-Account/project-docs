@@ -7,6 +7,7 @@ interface LivePreviewProps {
   generatedText: string;
   onCopy: () => void;
   onDownload: () => void;
+  onShare: () => void;
   copied: boolean;
 }
 
@@ -15,6 +16,7 @@ export function LivePreview({
   generatedText,
   onCopy,
   onDownload,
+  onShare,
   copied,
 }: LivePreviewProps) {
   return (
@@ -28,10 +30,32 @@ export function LivePreview({
             </span>
           </h2>
           <p className="text-xs text-slate-400 mt-1">
-            Rendered template preview ready for copying or downloading.
+            Rendered template preview ready for sharing, copying, or downloading.
           </p>
         </div>
         <div className="flex items-center gap-2.5">
+          {/* SHARE BUTTON */}
+          <button
+            onClick={onShare}
+            title="Generate a 10-minute expiring view-only link"
+            className="bg-indigo-600 hover:bg-indigo-500 text-white px-3.5 py-2 rounded-lg text-sm transition font-medium flex items-center gap-1.5 shadow-sm shadow-indigo-600/30 cursor-pointer active:scale-[0.98]"
+          >
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
+              />
+            </svg>
+            <span>Share</span>
+          </button>
+
           <button
             onClick={onCopy}
             className="bg-slate-800 hover:bg-slate-700 border border-slate-700 px-4 py-2 rounded-lg text-sm transition font-medium flex items-center gap-1.5 cursor-pointer text-slate-200"

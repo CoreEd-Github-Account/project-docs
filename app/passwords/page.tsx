@@ -4,43 +4,8 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { LoginForm } from "@/components/LoginForm";
 
-export interface PasswordItem {
-  id: string;
-  projectName: string;
-  url: string;
-  identifier: string; // ID / Username / Email
-  password: string; // Saved in plain text
-  createdAt: string;
-}
-
-const STORAGE_KEY = "passwords_data_v1";
-
-const DEFAULT_SAMPLES: PasswordItem[] = [
-  {
-    id: "pwd-1",
-    projectName: "Supabase Database",
-    url: "https://supabase.com/dashboard",
-    identifier: "admin@project-docs.com",
-    password: "SuperSecretDbPassword2026!",
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "pwd-2",
-    projectName: "GitHub Repository",
-    url: "https://github.com/login",
-    identifier: "CoreEd-Github-Account",
-    password: "ghp_secureTokenPlaintext12345",
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "pwd-3",
-    projectName: "Staging Server Admin",
-    url: "https://staging.example.com/admin",
-    identifier: "taha_admin",
-    password: "taha2026!staging",
-    createdAt: new Date().toISOString(),
-  },
-];
+import type { PasswordItem } from "@/lib/types";
+export type { PasswordItem };
 
 export default function PasswordManagerPage() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
@@ -92,36 +57,38 @@ export default function PasswordManagerPage() {
     }
   };
 
-  // 2. Load Passwords from LocalStorage
-  useEffect(() => {
+  const [isLoading, setIsLoading] = useState(true);
+  const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "error">(
+    "saved"
+  );
+
+  // Fetch passwords from database API
+  const fetchPasswords = useCallback(async () => {
     try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setPasswords(parsed);
-          setIsLoaded(true);
-          return;
-        }
+      setIsLoading(true);
+      const res = await fetch("/api/passwords");
+      if (res.status === 401) {
+        setIsAuthenticated(false);
+        return;
       }
-      setPasswords(DEFAULT_SAMPLES);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_SAMPLES));
-    } catch {
-      setPasswords(DEFAULT_SAMPLES);
+      if (!res.ok) throw new Error("Failed to fetch passwords");
+      const data: PasswordItem[] = await res.json();
+      setPasswords(data);
+      setSaveStatus("saved");
+    } catch (err) {
+      console.error("Error loading passwords from Supabase:", err);
+      setSaveStatus("error");
     } finally {
+      setIsLoading(false);
       setIsLoaded(true);
     }
   }, []);
 
-  // 3. Persist Passwords to LocalStorage
   useEffect(() => {
-    if (!isLoaded) return;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(passwords));
-    } catch (e) {
-      console.error("Failed to save passwords to localStorage", e);
+    if (isAuthenticated) {
+      fetchPasswords();
     }
-  }, [passwords, isLoaded]);
+  }, [isAuthenticated, fetchPasswords]);
 
   // Open modal to add new password
   const handleOpenAdd = () => {
@@ -145,44 +112,65 @@ export default function PasswordManagerPage() {
     setIsModalOpen(true);
   };
 
-  // Save (Add or Update)
-  const handleSave = (e: React.FormEvent) => {
+  // Save (Add or Update) via API
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formProjectName.trim() || !formIdentifier.trim() || !formPassword) return;
 
-    if (editingId) {
-      setPasswords((prev) =>
-        prev.map((item) =>
-          item.id === editingId
-            ? {
-                ...item,
-                projectName: formProjectName.trim(),
-                url: formUrl.trim(),
-                identifier: formIdentifier.trim(),
-                password: formPassword, // plain text
-              }
-            : item
-        )
-      );
-    } else {
-      const newItem: PasswordItem = {
-        id: `pwd-${Date.now()}`,
-        projectName: formProjectName.trim(),
-        url: formUrl.trim(),
-        identifier: formIdentifier.trim(),
-        password: formPassword, // plain text
-        createdAt: new Date().toISOString(),
-      };
-      setPasswords((prev) => [newItem, ...prev]);
-    }
+    const idToUse = editingId || `pwd-${Date.now()}`;
+    const item: PasswordItem = {
+      id: idToUse,
+      projectName: formProjectName.trim(),
+      url: formUrl.trim(),
+      identifier: formIdentifier.trim(),
+      password: formPassword,
+      createdAt: new Date().toISOString(),
+    };
 
-    setIsModalOpen(false);
+    setSaveStatus("saving");
+    try {
+      const res = await fetch("/api/passwords", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(item),
+      });
+
+      if (!res.ok) throw new Error("Failed to save password");
+
+      if (editingId) {
+        setPasswords((prev) =>
+          prev.map((p) => (p.id === editingId ? item : p))
+        );
+      } else {
+        setPasswords((prev) => [item, ...prev]);
+      }
+      setSaveStatus("saved");
+      setIsModalOpen(false);
+    } catch (err) {
+      console.error("Error saving password:", err);
+      setSaveStatus("error");
+      alert("Failed to save password to database.");
+    }
   };
 
-  // Delete
-  const handleDelete = (id: string, name: string) => {
-    if (confirm(`Delete password for "${name}"?`)) {
+  // Delete via API
+  const handleDelete = async (id: string, name: string) => {
+    if (!confirm(`Delete password for "${name}" from database?`)) return;
+
+    setSaveStatus("saving");
+    try {
+      const res = await fetch(`/api/passwords?id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+
+      if (!res.ok) throw new Error("Failed to delete password");
+
       setPasswords((prev) => prev.filter((item) => item.id !== id));
+      setSaveStatus("saved");
+    } catch (err) {
+      console.error("Error deleting password:", err);
+      setSaveStatus("error");
+      alert("Failed to delete password from database.");
     }
   };
 
@@ -246,7 +234,12 @@ export default function PasswordManagerPage() {
               <h1 className="text-base font-bold text-white leading-tight">
                 Password Manager
               </h1>
-              <span className="text-xs text-slate-400">Plain-text Local Storage</span>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                <span className="text-[11px] text-slate-400">
+                  Supabase PG: {saveStatus === "saving" ? "Saving..." : saveStatus === "error" ? "Sync Error" : "Synced"}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -323,9 +316,14 @@ export default function PasswordManagerPage() {
         </div>
 
         {/* Passwords List */}
-        {filteredPasswords.length === 0 ? (
+        {isLoading ? (
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-12 text-center text-slate-400">
+            <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+            <p className="text-sm font-medium">Loading credentials from Supabase PG...</p>
+          </div>
+        ) : filteredPasswords.length === 0 ? (
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-8 text-center text-slate-400">
-            <p className="text-sm font-medium">No passwords found.</p>
+            <p className="text-sm font-medium">No credentials found in database.</p>
             <button
               onClick={handleOpenAdd}
               className="mt-3 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-lg cursor-pointer shadow-sm shadow-blue-600/30"

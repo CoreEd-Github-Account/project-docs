@@ -1,42 +1,149 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import {
-  AUTH_COOKIE_NAME,
-  AUTH_TOKEN_VALUE,
-  verifyCredentials,
-  isServerAuthenticated,
+  authenticateCredentials,
+  getAuthenticatedUser,
+  setAuthSessionCookie,
+  clearAuthSessionCookie,
 } from "@/lib/auth";
+import {
+  findUserByUsername,
+  createUser,
+  resetUserPassword,
+} from "@/lib/db";
+import { hashPassword } from "@/lib/crypto";
 
 export async function GET() {
-  const authenticated = await isServerAuthenticated();
-  return NextResponse.json({ authenticated });
+  const auth = await getAuthenticatedUser();
+  return NextResponse.json(auth);
 }
 
 export async function POST(request: Request) {
   try {
-    const { username, password } = await request.json();
+    const body = await request.json();
+    const action = body.action || "login";
 
-    if (!verifyCredentials(username, password)) {
+    // 1. REGISTRATION
+    if (action === "register") {
+      const { username, password, email, recoveryKey } = body;
+      if (!username?.trim() || !password) {
+        return NextResponse.json(
+          { error: "Username and password are required" },
+          { status: 400 }
+        );
+      }
+
+      const cleanUsername = username.trim();
+      if (cleanUsername.length < 3) {
+        return NextResponse.json(
+          { error: "Username must be at least 3 characters" },
+          { status: 400 }
+        );
+      }
+
+      if (password.length < 4) {
+        return NextResponse.json(
+          { error: "Password must be at least 4 characters" },
+          { status: 400 }
+        );
+      }
+
+      // Check if user already exists
+      const existingUser = await findUserByUsername(cleanUsername);
+      if (existingUser) {
+        return NextResponse.json(
+          { error: "Username already taken. Please choose another or sign in." },
+          { status: 409 }
+        );
+      }
+
+      const passwordHash = hashPassword(password);
+      const newUser = await createUser(
+        cleanUsername,
+        email?.trim() || undefined,
+        passwordHash,
+        recoveryKey?.trim() || undefined
+      );
+
+      // Auto login after registration
+      await setAuthSessionCookie(newUser.id, newUser.username);
+
+      return NextResponse.json({
+        success: true,
+        authenticated: true,
+        user: { id: newUser.id, username: newUser.username },
+      });
+    }
+
+    // 2. PASSWORD RESET
+    if (action === "reset") {
+      const { username, newPassword, recoveryKey } = body;
+      if (!username?.trim() || !newPassword) {
+        return NextResponse.json(
+          { error: "Username/Email and new password are required" },
+          { status: 400 }
+        );
+      }
+
+      if (newPassword.length < 4) {
+        return NextResponse.json(
+          { error: "New password must be at least 4 characters" },
+          { status: 400 }
+        );
+      }
+
+      const user = await findUserByUsername(username.trim());
+      if (!user) {
+        return NextResponse.json(
+          { error: "Account not found with this username or email" },
+          { status: 404 }
+        );
+      }
+
+      // If user had a recovery key set, verify it
+      if (user.recoveryKey && user.recoveryKey.trim()) {
+        if (!recoveryKey || recoveryKey.trim() !== user.recoveryKey.trim()) {
+          return NextResponse.json(
+            { error: "Invalid security recovery key for this account" },
+            { status: 403 }
+          );
+        }
+      }
+
+      const newHash = hashPassword(newPassword);
+      const success = await resetUserPassword(username.trim(), newHash, recoveryKey);
+      if (!success) {
+        return NextResponse.json(
+          { error: "Failed to reset password. Please check your credentials." },
+          { status: 400 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: "Password reset successful. Please sign in with your new password.",
+      });
+    }
+
+    // 3. LOGIN (DEFAULT)
+    const { username, password } = body;
+    const user = await authenticateCredentials(username, password);
+
+    if (!user) {
       return NextResponse.json(
         { error: "Invalid username or password" },
         { status: 401 }
       );
     }
 
-    const cookieStore = await cookies();
-    cookieStore.set({
-      name: AUTH_COOKIE_NAME,
-      value: AUTH_TOKEN_VALUE,
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-      maxAge: 60 * 60 * 24 * 30, // 30 days
-    });
+    await setAuthSessionCookie(user.id, user.username);
 
-    return NextResponse.json({ success: true, authenticated: true });
+    return NextResponse.json({
+      success: true,
+      authenticated: true,
+      user: { id: user.id, username: user.username },
+    });
   } catch (error) {
-    console.error("Auth login error:", error);
+    console.error("Auth POST error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -46,8 +153,7 @@ export async function POST(request: Request) {
 
 export async function DELETE() {
   try {
-    const cookieStore = await cookies();
-    cookieStore.delete(AUTH_COOKIE_NAME);
+    await clearAuthSessionCookie();
     return NextResponse.json({ success: true, authenticated: false });
   } catch (error) {
     console.error("Auth logout error:", error);

@@ -11,7 +11,7 @@ interface SidebarProps {
   isSidebarOpen: boolean;
   setIsSidebarOpen: (open: boolean) => void;
   isLoading: boolean;
-  saveStatus: "saved" | "saving" | "error";
+  saveStatus: "saved" | "unsaved" | "saving" | "error";
   onSelectProject: (id: string) => void;
   onCreateProject: () => void;
   onDeleteProject: (e: React.MouseEvent, project: Project) => void;
@@ -48,7 +48,7 @@ export function Sidebar({
 
       {/* LEFT SIDEBAR */}
       <aside
-        className={`fixed md:static inset-y-0 left-0 z-20 w-72 md:w-80 bg-slate-900 text-slate-200 border-r border-slate-800 flex flex-col transition-transform duration-300 ease-in-out md:translate-x-0 shrink-0 ${
+        className={`fixed md:sticky top-0 inset-y-0 left-0 z-20 w-72 md:w-80 h-screen max-h-screen bg-slate-900 text-slate-200 border-r border-slate-800 flex flex-col transition-transform duration-300 ease-in-out md:translate-x-0 shrink-0 ${
           isSidebarOpen ? "translate-x-0" : "-translate-x-0 max-md:-translate-x-full"
         }`}
       >
@@ -75,6 +75,11 @@ export function Sidebar({
               {saveStatus === "saving" && (
                 <span className="text-amber-400 flex items-center gap-1">
                   <span className="animate-spin text-xs">⟳</span> Saving
+                </span>
+              )}
+              {saveStatus === "unsaved" && (
+                <span className="text-amber-400 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span> Unsaved
                 </span>
               )}
               {saveStatus === "saved" && (
@@ -151,7 +156,7 @@ export function Sidebar({
         </div>
 
         {/* Scrollable Project List */}
-        <div className="flex-1 overflow-y-auto px-3 py-1 space-y-1 scrollbar-thin scrollbar-thumb-slate-700">
+        <div className="flex-1 min-h-0 overflow-y-auto px-3 py-1 space-y-1 scrollbar-thin scrollbar-thumb-slate-700">
           {isLoading ? (
             <div className="p-6 text-center text-slate-500 text-sm">
               <span className="inline-block animate-spin mr-2">⟳</span>
@@ -235,7 +240,7 @@ export function Sidebar({
         </div>
 
         {/* Footer info & Logout */}
-        <div className="p-3 border-t border-slate-800 text-[11px] text-slate-400 space-y-2">
+        <div className="p-3 border-t border-slate-800 text-[11px] text-slate-400 space-y-2 mt-auto shrink-0 bg-slate-900">
           <div className="flex items-center justify-between">
             <span className="flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>

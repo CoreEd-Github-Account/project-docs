@@ -4,52 +4,8 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { LoginForm } from "@/components/LoginForm";
 
-export interface Subscription {
-  id: string;
-  name: string;
-  amount: number;
-  purchaseDate: string; // Format: YYYY-MM-DD
-  renewalDate: string;  // Format: YYYY-MM-DD
-}
-
-const STORAGE_KEY = "subscriptions_simple_pkr_v2";
-
-const getTodayDate = () => {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-};
-
-const getRelativeDate = (daysAhead: number) => {
-  const d = new Date();
-  d.setDate(d.getDate() + daysAhead);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-};
-
-const DEFAULT_SAMPLES: Subscription[] = [
-  {
-    id: "sample-1",
-    name: "Netflix",
-    amount: 1500,
-    purchaseDate: getRelativeDate(-28),
-    renewalDate: getRelativeDate(2),
-  },
-  {
-    id: "sample-2",
-    name: "ChatGPT Plus",
-    amount: 5600,
-    purchaseDate: getRelativeDate(-26),
-    renewalDate: getRelativeDate(4),
-  },
-  {
-    id: "sample-3",
-    name: "Spotify",
-    amount: 450,
-    purchaseDate: getRelativeDate(-12),
-    renewalDate: getRelativeDate(18),
-  },
-];
+import type { Subscription } from "@/lib/types";
+export type { Subscription };
 
 export default function SubscriptionsPage() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
@@ -98,47 +54,51 @@ export default function SubscriptionsPage() {
   const [formPurchaseDate, setFormPurchaseDate] = useState("");
   const [formRenewalDate, setFormRenewalDate] = useState("");
 
-  // 1. Load from LocalStorage (with backward-compatible migration for purchaseDate)
-  useEffect(() => {
-    try {
-      const stored =
-        localStorage.getItem(STORAGE_KEY) ||
-        localStorage.getItem("subscriptions_simple_pkr_v1") ||
-        localStorage.getItem("subscriptions_data_pkr_v1");
+  const [isLoading, setIsLoading] = useState(true);
+  const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "error">(
+    "saved"
+  );
 
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const formatted = parsed.map((item: Partial<Subscription>) => ({
-            id: item.id || `sub-${Date.now()}`,
-            name: item.name || "Untitled",
-            amount: Number(item.amount) || 0,
-            purchaseDate: item.purchaseDate || getRelativeDate(-30),
-            renewalDate: (item.renewalDate || getRelativeDate(30)).slice(0, 10),
-          }));
-          setSubscriptions(formatted);
-          setIsLoaded(true);
-          return;
-        }
+  const getTodayDate = () => {
+    const d = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  };
+
+  const getRelativeDate = (daysAhead: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() + daysAhead);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  };
+
+  // Fetch subscriptions from database API
+  const fetchSubscriptions = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const res = await fetch("/api/subscriptions");
+      if (res.status === 401) {
+        setIsAuthenticated(false);
+        return;
       }
-      setSubscriptions(DEFAULT_SAMPLES);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_SAMPLES));
-    } catch {
-      setSubscriptions(DEFAULT_SAMPLES);
+      if (!res.ok) throw new Error("Failed to fetch subscriptions");
+      const data: Subscription[] = await res.json();
+      setSubscriptions(data);
+      setSaveStatus("saved");
+    } catch (err) {
+      console.error("Error loading subscriptions from Supabase:", err);
+      setSaveStatus("error");
     } finally {
+      setIsLoading(false);
       setIsLoaded(true);
     }
   }, []);
 
-  // 2. Persist to LocalStorage
   useEffect(() => {
-    if (!isLoaded) return;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(subscriptions));
-    } catch (e) {
-      console.error("Failed to save to localStorage", e);
+    if (isAuthenticated) {
+      fetchSubscriptions();
     }
-  }, [subscriptions, isLoaded]);
+  }, [isAuthenticated, fetchSubscriptions]);
 
   // Helper: Calculate remaining time on-demand from current moment
   const calculateRemaining = (dateStr: string) => {
@@ -227,56 +187,77 @@ export default function SubscriptionsPage() {
   };
 
   // Save (Add or Update)
-  const handleSave = (e: React.FormEvent) => {
+  // Save (Add or Update) via API
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName.trim() || !formRenewalDate) return;
 
     const amountNum = parseFloat(formAmount) || 0;
     const finalPurchaseDate = formPurchaseDate || getTodayDate();
+    const idToUse = editingId || `sub-${Date.now()}`;
 
-    if (editingId) {
-      setSubscriptions((prev) =>
-        prev.map((s) =>
-          s.id === editingId
-            ? {
-                ...s,
-                name: formName.trim(),
-                amount: amountNum,
-                purchaseDate: finalPurchaseDate,
-                renewalDate: formRenewalDate,
-              }
-            : s
-        )
-      );
-      // Update calculated time for edited item
-      setCalculatedTimes((prev) => ({
-        ...prev,
-        [editingId]: calculateRemaining(formRenewalDate),
-      }));
-    } else {
-      const newId = `sub-${Date.now()}`;
-      const newSub: Subscription = {
-        id: newId,
-        name: formName.trim(),
-        amount: amountNum,
-        purchaseDate: finalPurchaseDate,
-        renewalDate: formRenewalDate,
-      };
-      setSubscriptions((prev) => [newSub, ...prev]);
+    const subItem: Subscription = {
+      id: idToUse,
+      name: formName.trim(),
+      amount: amountNum,
+      purchaseDate: finalPurchaseDate,
+      renewalDate: formRenewalDate,
+    };
+
+    setSaveStatus("saving");
+    try {
+      const res = await fetch("/api/subscriptions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(subItem),
+      });
+
+      if (!res.ok) throw new Error("Failed to save subscription");
+
+      if (editingId) {
+        setSubscriptions((prev) =>
+          prev.map((s) => (s.id === editingId ? subItem : s))
+        );
+        setCalculatedTimes((prev) => ({
+          ...prev,
+          [editingId]: calculateRemaining(formRenewalDate),
+        }));
+      } else {
+        setSubscriptions((prev) => [subItem, ...prev]);
+      }
+
+      setSaveStatus("saved");
+      setIsModalOpen(false);
+    } catch (err) {
+      console.error("Save subscription error:", err);
+      setSaveStatus("error");
+      alert("Failed to save subscription to database.");
     }
-
-    setIsModalOpen(false);
   };
 
-  // Delete
-  const handleDelete = (id: string) => {
-    if (confirm("Delete this subscription?")) {
+  // Delete via API
+  const handleDelete = async (id: string) => {
+    if (!confirm("Delete this subscription from database?")) return;
+
+    setSaveStatus("saving");
+    try {
+      const res = await fetch(`/api/subscriptions?id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+
+      if (!res.ok) throw new Error("Failed to delete subscription");
+
       setSubscriptions((prev) => prev.filter((s) => s.id !== id));
       setCalculatedTimes((prev) => {
         const copy = { ...prev };
         delete copy[id];
         return copy;
       });
+      setSaveStatus("saved");
+    } catch (err) {
+      console.error("Delete subscription error:", err);
+      setSaveStatus("error");
+      alert("Failed to delete subscription from database.");
     }
   };
 
@@ -367,7 +348,12 @@ export default function SubscriptionsPage() {
               <h1 className="text-base font-bold text-white leading-tight">
                 Subscription Manager
               </h1>
-              <span className="text-xs text-slate-400">Auto-saved to browser</span>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                <span className="text-[11px] text-slate-400">
+                  Supabase PG: {saveStatus === "saving" ? "Saving..." : saveStatus === "error" ? "Sync Error" : "Synced"}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -463,9 +449,14 @@ export default function SubscriptionsPage() {
         </div>
 
         {/* Subscriptions List */}
-        {displayedSubs.length === 0 ? (
+        {isLoading ? (
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-12 text-center text-slate-400">
+            <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+            <p className="text-sm font-medium">Loading subscriptions from Supabase PG...</p>
+          </div>
+        ) : displayedSubs.length === 0 ? (
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-8 text-center text-slate-400">
-            <p className="text-sm font-medium">No subscriptions found.</p>
+            <p className="text-sm font-medium">No subscriptions in database.</p>
             <button
               onClick={handleOpenAdd}
               className="mt-3 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-lg cursor-pointer shadow-sm shadow-blue-600/30"
