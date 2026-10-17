@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, Suspense } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -20,7 +20,7 @@ interface ExistingUserData {
   fullName?: string;
 }
 
-export default function InviteAcceptPage() {
+function InviteAcceptContent() {
   const params = useParams();
   const router = useRouter();
   const token = typeof params?.token === "string" ? params.token : "";
@@ -431,3 +431,18 @@ export default function InviteAcceptPage() {
     </div>
   );
 }
+
+export default function InviteAcceptPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+          <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      }
+    >
+      <InviteAcceptContent />
+    </Suspense>
+  );
+}
+
