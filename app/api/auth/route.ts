@@ -7,6 +7,7 @@ import {
 } from "@/lib/auth";
 import {
   findUserByUsername,
+  findUserById,
   createUser,
   resetUserPassword,
 } from "@/lib/db";
@@ -14,6 +15,23 @@ import { hashPassword } from "@/lib/crypto";
 
 export async function GET() {
   const auth = await getAuthenticatedUser();
+  if (auth.authenticated && auth.user) {
+    try {
+      const user = await findUserById(auth.user.id);
+      return NextResponse.json({
+        ...auth,
+        user: {
+          id: auth.user.id,
+          username: auth.user.username,
+          fullName: user?.fullName || undefined,
+          email: user?.email || undefined,
+          avatarUrl: user?.avatarUrl || undefined,
+        },
+      });
+    } catch (err) {
+      console.error("GET /api/auth error fetching user details:", err);
+    }
+  }
   return NextResponse.json(auth);
 }
 

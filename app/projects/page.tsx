@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import type { Project, Section } from "@/lib/types";
+import type { Project, Section, ProjectViewTab, ProjectRole } from "@/lib/types";
 import { Sidebar } from "@/components/Sidebar";
 import { TemplateEditor } from "@/components/TemplateEditor";
 import { LivePreview } from "@/components/LivePreview";
 import { TaskNotepad } from "@/components/TaskNotepad";
 import { LoginForm } from "@/components/LoginForm";
 import { ShareModal } from "@/components/ShareModal";
+import { InviteFriendModal } from "@/components/InviteFriendModal";
 import Link from "next/link";
 
 const MY_TEMPLATE_HEADINGS = [
@@ -31,8 +32,11 @@ export default function ProjectTemplateBuilder() {
     "saved" | "unsaved" | "saving" | "error"
   >("saved");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [copied, setCopied] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  const [currentUser, setCurrentUser] = useState<{ id: string; username: string; fullName?: string } | null>(null);
 
   // 1. Check Authentication Status on mount
   const checkAuth = useCallback(async () => {
@@ -41,6 +45,9 @@ export default function ProjectTemplateBuilder() {
       const data = await res.json();
       if (data.authenticated) {
         setIsAuthenticated(true);
+        if (data.user) {
+          setCurrentUser(data.user);
+        }
       } else {
         setIsAuthenticated(false);
       }
@@ -54,10 +61,10 @@ export default function ProjectTemplateBuilder() {
     checkAuth();
   }, [checkAuth]);
 
-  // 2. Fetch projects from Supabase database
-  const fetchProjects = useCallback(async () => {
+  // 2. Fetch projects from Supabase database (with background silent refresh support)
+  const fetchProjects = useCallback(async (isSilent = false) => {
     try {
-      setIsLoading(true);
+      if (!isSilent) setIsLoading(true);
       const res = await fetch("/api/projects");
       if (res.status === 401) {
         setIsAuthenticated(false);
@@ -65,15 +72,21 @@ export default function ProjectTemplateBuilder() {
       }
       if (!res.ok) throw new Error("Failed to fetch projects");
       const data: Project[] = await res.json();
-      setProjects(data);
-      if (data.length > 0) {
-        setActiveProjectId(data[0].id);
+      setProjects((prev) => {
+        if (!isSilent) return data;
+        if (JSON.stringify(prev) !== JSON.stringify(data)) {
+          return data;
+        }
+        return prev;
+      });
+      if (!isSilent && data.length > 0) {
+        setActiveProjectId((curr) => curr || data[0].id);
       }
     } catch (err) {
       console.error("Error loading projects from Supabase:", err);
-      setSaveStatus("error");
+      if (!isSilent) setSaveStatus("error");
     } finally {
-      setIsLoading(false);
+      if (!isSilent) setIsLoading(false);
     }
   }, []);
 
@@ -82,6 +95,20 @@ export default function ProjectTemplateBuilder() {
       fetchProjects();
     }
   }, [isAuthenticated, fetchProjects]);
+
+  // Periodic background live sync of permissions & projects (every 3.5 seconds)
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const interval = setInterval(() => {
+      // Don't overwrite if currently saving or having unsaved local changes
+      if (saveStatus === "saving" || saveStatus === "unsaved") return;
+      if (typeof document !== "undefined" && document.hidden) return;
+      fetchProjects(true);
+    }, 3500);
+
+    return () => clearInterval(interval);
+  }, [isAuthenticated, saveStatus, fetchProjects]);
 
   // Handle Logout
   const handleLogout = async () => {
@@ -101,8 +128,48 @@ export default function ProjectTemplateBuilder() {
   const activeProject =
     projects.find((p) => p.id === activeProjectId) || projects[0] || null;
 
+  // Allowed module views calculation & dynamic permission sync
+  const isOwner = activeProject ? activeProject.isOwner !== false : true;
+  const currentUserPermission: ProjectRole = activeProject
+    ? isOwner
+      ? "owner"
+      : activeProject.currentUserPermission || "read"
+    : "owner";
+
+  const isReadOnly = !isOwner && currentUserPermission === "read";
+  const canDelete = isOwner || currentUserPermission === "full";
+  const canEdit = isOwner || currentUserPermission === "edit_no_delete" || currentUserPermission === "full";
+
+  const allowedViews: ProjectViewTab[] = activeProject
+    ? isOwner
+      ? ["builder", "preview", "tasks"]
+      : activeProject.allowedViews && activeProject.allowedViews.length > 0
+      ? activeProject.allowedViews
+      : ["builder", "preview", "tasks"]
+    : ["builder", "preview", "tasks"];
+
+  const canViewBuilder = isOwner || allowedViews.includes("builder");
+  const canViewPreview = isOwner || allowedViews.includes("preview");
+  const canViewTasks = isOwner || allowedViews.includes("tasks");
+
+  // Dynamically auto-switch active tab if current tab is restricted for collaborator
+  useEffect(() => {
+    if (!activeProject || isOwner) return;
+    if (!allowedViews.includes(activeTab)) {
+      const firstAllowed = (["builder", "preview", "tasks"] as const).find((t) =>
+        allowedViews.includes(t)
+      );
+      if (firstAllowed) {
+        setActiveTab(firstAllowed);
+      }
+    }
+  }, [activeProject, isOwner, allowedViews, activeTab]);
+
   // Persist project changes to Supabase via API
   const persistProjectToDb = async (projectToSave: Project) => {
+    const isSaveReadOnly = projectToSave.isOwner === false && projectToSave.currentUserPermission === "read";
+    if (isSaveReadOnly) return;
+
     try {
       setSaveStatus("saving");
       const res = await fetch("/api/projects", {
@@ -112,6 +179,10 @@ export default function ProjectTemplateBuilder() {
       });
       if (res.status === 401) {
         setIsAuthenticated(false);
+        return;
+      }
+      if (res.status === 403) {
+        setSaveStatus("error");
         return;
       }
       if (!res.ok) throw new Error("Failed to save project");
@@ -124,11 +195,30 @@ export default function ProjectTemplateBuilder() {
 
   // Manual Save Active Project to Database
   const handleSaveActiveProject = async () => {
-    if (!activeProject) return;
+    if (!activeProject || isReadOnly) return;
     await persistProjectToDb(activeProject);
   };
 
-  // Keyboard shortcut Ctrl+S / Cmd+S to save
+  // Keyboard shortcuts: Ctrl+S to save, Ctrl+B to toggle sidebar
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("template_studio_sidebar_collapsed");
+      if (saved !== null) {
+        setIsSidebarCollapsed(saved === "true");
+      }
+    } catch {}
+  }, []);
+
+  const handleToggleSidebarCollapse = () => {
+    setIsSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("template_studio_sidebar_collapsed", String(next));
+      } catch {}
+      return next;
+    });
+  };
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
@@ -136,6 +226,9 @@ export default function ProjectTemplateBuilder() {
         if (activeProject) {
           persistProjectToDb(activeProject);
         }
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "b") {
+        e.preventDefault();
+        handleToggleSidebarCollapse();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -167,6 +260,12 @@ export default function ProjectTemplateBuilder() {
     projectToDelete: Project
   ) => {
     e.stopPropagation();
+    const canDeleteThis = projectToDelete.isOwner !== false || projectToDelete.currentUserPermission === "full";
+    if (!canDeleteThis) {
+      alert("You do not have permission to delete this project (Owner or Full Access required).");
+      return;
+    }
+
     const confirmed = confirm(
       `Are you sure you want to delete "${projectToDelete.name || "Untitled"}"?`
     );
@@ -199,7 +298,7 @@ export default function ProjectTemplateBuilder() {
   };
 
   const updateActiveProjectName = (name: string) => {
-    if (!activeProject) return;
+    if (!activeProject || isReadOnly) return;
     const updated = { ...activeProject, name };
     setProjects((prev) =>
       prev.map((p) => (p.id === activeProject.id ? updated : p))
@@ -209,7 +308,7 @@ export default function ProjectTemplateBuilder() {
 
   // Section Actions
   const addSection = () => {
-    if (!newHeading.trim() || !activeProject) return;
+    if (!newHeading.trim() || !activeProject || isReadOnly) return;
     const newSection: Section = {
       id: Date.now(),
       heading: newHeading.trim(),
@@ -230,7 +329,7 @@ export default function ProjectTemplateBuilder() {
 
   // "My Template" Quick Presets
   const applyMyTemplate = () => {
-    if (!activeProject) return;
+    if (!activeProject || isReadOnly) return;
     const now = Date.now();
     const newSections: Section[] = MY_TEMPLATE_HEADINGS.map((heading, idx) => ({
       id: now + idx,
@@ -250,7 +349,7 @@ export default function ProjectTemplateBuilder() {
   };
 
   const removeSection = (sectionId: number) => {
-    if (!activeProject) return;
+    if (!activeProject || isReadOnly || !canDelete) return;
     const updated = {
       ...activeProject,
       sections: activeProject.sections.filter((sec) => sec.id !== sectionId),
@@ -263,7 +362,7 @@ export default function ProjectTemplateBuilder() {
   };
 
   const updateSectionContent = (sectionId: number, content: string) => {
-    if (!activeProject) return;
+    if (!activeProject || isReadOnly) return;
     const updated = {
       ...activeProject,
       sections: activeProject.sections.map((sec) =>
@@ -278,7 +377,7 @@ export default function ProjectTemplateBuilder() {
   };
 
   const updateSectionHeading = (sectionId: number, heading: string) => {
-    if (!activeProject) return;
+    if (!activeProject || isReadOnly) return;
     const updated = {
       ...activeProject,
       sections: activeProject.sections.map((sec) =>
@@ -293,7 +392,7 @@ export default function ProjectTemplateBuilder() {
   };
 
   const updateActiveProjectTasks = (tasks: string) => {
-    if (!activeProject) return;
+    if (!activeProject || isReadOnly) return;
     const updated = { ...activeProject, tasks };
     setProjects((prev) =>
       prev.map((p) => (p.id === activeProject.id ? updated : p))
@@ -302,7 +401,7 @@ export default function ProjectTemplateBuilder() {
   };
 
   const handleManualSaveTasks = () => {
-    if (!activeProject) return;
+    if (!activeProject || isReadOnly) return;
     persistProjectToDb(activeProject);
   };
 
@@ -445,6 +544,8 @@ export default function ProjectTemplateBuilder() {
         setSearchQuery={setSearchQuery}
         isSidebarOpen={isSidebarOpen}
         setIsSidebarOpen={setIsSidebarOpen}
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapse={handleToggleSidebarCollapse}
         isLoading={isLoading}
         saveStatus={saveStatus}
         onSelectProject={(id) => {
@@ -454,6 +555,8 @@ export default function ProjectTemplateBuilder() {
         onCreateProject={handleCreateProject}
         onDeleteProject={handleDeleteProject}
         onLogout={handleLogout}
+        username={currentUser?.username}
+        fullName={currentUser?.fullName}
       />
 
       {/* RIGHT SIDE: Main Content Workspace */}
@@ -464,126 +567,37 @@ export default function ProjectTemplateBuilder() {
             <p className="text-sm font-medium">Loading projects from Supabase...</p>
           </div>
         ) : activeProject ? (
-          <div className="max-w-5xl mx-auto space-y-6">
+          <div className={`${isSidebarCollapsed ? "max-w-7xl" : "max-w-5xl"} mx-auto space-y-6 transition-all duration-300`}>
             {/* VIEW TOGGLE BUTTONS: Template Builder vs Live Preview */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-slate-900 p-3.5 rounded-xl border border-slate-800 shadow-md">
-              <div className="flex items-center bg-slate-950 p-1 rounded-lg border border-slate-800">
+              <div className="flex items-center gap-2.5 flex-wrap">
+                {/* Desktop Sidebar Toggle Button */}
                 <button
-                  onClick={() => setActiveTab("builder")}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold transition cursor-pointer ${
-                    activeTab === "builder"
-                      ? "bg-blue-600 text-white shadow-sm"
-                      : "text-slate-400 hover:text-white hover:bg-slate-800/80"
-                  }`}
+                  type="button"
+                  onClick={handleToggleSidebarCollapse}
+                  title={isSidebarCollapsed ? "Expand sidebar (Ctrl+B)" : "Collapse sidebar (Ctrl+B)"}
+                  aria-label={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+                  className="hidden md:flex items-center justify-center w-9 h-9 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-white transition cursor-pointer border border-slate-800 shadow-sm shrink-0"
                 >
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                    />
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    {isSidebarCollapsed ? (
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                    ) : (
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                    )}
                   </svg>
-                  <span>Template Builder</span>
                 </button>
-                <button
-                  onClick={() => setActiveTab("preview")}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold transition cursor-pointer ${
-                    activeTab === "preview"
-                      ? "bg-blue-600 text-white shadow-sm"
-                      : "text-slate-400 hover:text-white hover:bg-slate-800/80"
-                  }`}
-                >
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                    />
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                    />
-                  </svg>
-                  <span>Live Preview</span>
-                </button>
-                <button
-                  onClick={() => setActiveTab("tasks")}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold transition cursor-pointer ${
-                    activeTab === "tasks"
-                      ? "bg-blue-600 text-white shadow-sm"
-                      : "text-slate-400 hover:text-white hover:bg-slate-800/80"
-                  }`}
-                >
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
-                    />
-                  </svg>
-                  <span>Tasks</span>
-                </button>
-              </div>
 
-              <div className="flex items-center gap-2.5 w-full sm:w-auto justify-between sm:justify-end flex-wrap">
-                <Link
-                  href="/"
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800/80 hover:bg-slate-800 text-slate-200 border border-slate-700 rounded-lg text-sm font-medium transition shadow-sm cursor-pointer"
-                  title="Back to Navigation Hub"
-                >
-                  <span>←</span>
-                  <span>Hub</span>
-                </Link>
-
-                <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white shadow-sm">
-                  <span className="text-sm font-medium text-slate-400">Project:</span>
-                  <span className="text-sm sm:text-base font-bold text-white tracking-wide">
-                    {activeProject.name || "Untitled"}
-                  </span>
-                </div>
-
-                {/* MANUAL SAVE BUTTON */}
-                <button
-                  onClick={handleSaveActiveProject}
-                  disabled={saveStatus === "saving"}
-                  title="Save current project to database (Ctrl+S)"
-                  className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition cursor-pointer active:scale-95 shadow-sm ${
-                    saveStatus === "saving"
-                      ? "bg-slate-800 text-slate-400 border border-slate-700 cursor-not-allowed"
-                      : saveStatus === "unsaved"
-                      ? "bg-blue-600 hover:bg-blue-500 text-white shadow-blue-600/30 ring-2 ring-blue-400/50"
-                      : saveStatus === "error"
-                      ? "bg-rose-900/80 hover:bg-rose-800 text-rose-200 border border-rose-500/40"
-                      : "bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-slate-700"
-                  }`}
-                >
-                  {saveStatus === "saving" ? (
-                    <>
-                      <span className="animate-spin text-xs">⟳</span>
-                      <span>Saving...</span>
-                    </>
-                  ) : saveStatus === "unsaved" ? (
-                    <>
+                <div className="flex items-center bg-slate-950 p-1 rounded-lg border border-slate-800">
+                  {canViewBuilder && (
+                    <button
+                      onClick={() => setActiveTab("builder")}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold transition cursor-pointer ${
+                        activeTab === "builder"
+                          ? "bg-blue-600 text-white shadow-sm"
+                          : "text-slate-400 hover:text-white hover:bg-slate-800/80"
+                      }`}
+                    >
                       <svg
                         className="w-4 h-4"
                         fill="none"
@@ -594,28 +608,210 @@ export default function ProjectTemplateBuilder() {
                           strokeLinecap="round"
                           strokeLinejoin="round"
                           strokeWidth={2}
-                          d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"
+                          d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
                         />
                       </svg>
-                      <span>Save Changes</span>
-                    </>
-                  ) : saveStatus === "error" ? (
-                    <>
-                      <span>⚠</span>
-                      <span>Retry Save</span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="text-emerald-400">✓</span>
-                      <span className="text-slate-200">Saved</span>
-                    </>
+                      <span>Template Builder</span>
+                    </button>
                   )}
-                </button>
+                  {canViewPreview && (
+                    <button
+                      onClick={() => setActiveTab("preview")}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold transition cursor-pointer ${
+                        activeTab === "preview"
+                          ? "bg-blue-600 text-white shadow-sm"
+                          : "text-slate-400 hover:text-white hover:bg-slate-800/80"
+                      }`}
+                    >
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                        />
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                        />
+                      </svg>
+                      <span>Live Preview</span>
+                    </button>
+                  )}
+                  {canViewTasks && (
+                    <button
+                      onClick={() => setActiveTab("tasks")}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold transition cursor-pointer ${
+                        activeTab === "tasks"
+                          ? "bg-blue-600 text-white shadow-sm"
+                          : "text-slate-400 hover:text-white hover:bg-slate-800/80"
+                      }`}
+                    >
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
+                        />
+                      </svg>
+                      <span>Project Tasks &amp; Notepad</span>
+                    </button>
+                  )}
+                </div>
+            </div>
+
+              <div className="flex items-center gap-2.5 w-full sm:w-auto justify-between sm:justify-end flex-wrap">
+                {activeTab === "tasks" && (
+                  <button
+                    onClick={() => setIsInviteModalOpen(true)}
+                    title="Invite a friend to this project"
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white text-xs sm:text-sm font-semibold transition cursor-pointer shadow-sm hover:shadow-indigo-600/30"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"
+                      />
+                    </svg>
+                    <span>Invite Friend</span>
+                  </button>
+                )}
+
+                <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white shadow-sm">
+                  <span className="text-sm font-medium text-slate-400">Project:</span>
+                  <span className="text-sm sm:text-base font-bold text-white tracking-wide">
+                    {activeProject.name || "Untitled"}
+                  </span>
+                  {!isOwner ? (
+                    <span
+                      className={`ml-1 text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded border ${
+                        currentUserPermission === "full"
+                          ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                          : currentUserPermission === "edit_no_delete"
+                          ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
+                          : "bg-blue-500/20 text-blue-300 border-blue-500/30"
+                      }`}
+                    >
+                      {currentUserPermission === "full"
+                        ? "Full Access"
+                        : currentUserPermission === "edit_no_delete"
+                        ? "Read & Edit"
+                        : "Read Only"}
+                    </span>
+                  ) : (
+                    <span className="ml-1 text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                      Owner
+                    </span>
+                  )}
+                </div>
+
+                {/* MANUAL SAVE BUTTON OR READ ONLY BADGE */}
+                {isReadOnly ? (
+                  <div
+                    title="Read Only Mode — Modifications are disabled"
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-slate-800/80 border border-slate-700/80 text-slate-400 text-xs sm:text-sm font-semibold select-none cursor-default shadow-sm"
+                  >
+                    <span className="w-2 h-2 rounded-full bg-blue-400 shrink-0" />
+                    <span>Read Only</span>
+                  </div>
+                ) : (
+                  <button
+                    onClick={handleSaveActiveProject}
+                    disabled={saveStatus === "saving"}
+                    title="Save current project to database (Ctrl+S)"
+                    className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition cursor-pointer active:scale-95 shadow-sm ${
+                      saveStatus === "saving"
+                        ? "bg-slate-800 text-slate-400 border border-slate-700 cursor-not-allowed"
+                        : saveStatus === "unsaved"
+                        ? "bg-blue-600 hover:bg-blue-500 text-white shadow-blue-600/30 ring-2 ring-blue-400/50"
+                        : saveStatus === "error"
+                        ? "bg-rose-900/80 hover:bg-rose-800 text-rose-200 border border-rose-500/40"
+                        : "bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-slate-700"
+                    }`}
+                  >
+                    {saveStatus === "saving" ? (
+                      <>
+                        <span className="animate-spin text-xs">⟳</span>
+                        <span>Saving...</span>
+                      </>
+                    ) : saveStatus === "unsaved" ? (
+                      <>
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"
+                          />
+                        </svg>
+                        <span>Save Changes</span>
+                      </>
+                    ) : saveStatus === "error" ? (
+                      <>
+                        <span>⚠</span>
+                        <span>Retry Save</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-emerald-400">✓</span>
+                        <span className="text-slate-200">Saved</span>
+                      </>
+                    )}
+                  </button>
+                )}
+
+                {/* PROJECT SETTINGS & MEMBERS ICON */}
+                <Link
+                  href={`/projects/members?projectId=${encodeURIComponent(activeProject.id)}`}
+                  title="Project Members & Permissions Settings"
+                  aria-label="Project Members & Permissions Settings"
+                  className="flex items-center justify-center w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-400 hover:text-white transition border border-slate-700 shadow-sm cursor-pointer shrink-0"
+                >
+                  <svg
+                    className="w-4 h-4 transition-transform duration-300 hover:rotate-45"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                    />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                    />
+                  </svg>
+                </Link>
               </div>
             </div>
 
             {/* VIEW 1: TEMPLATE BUILDER */}
-            {activeTab === "builder" && (
+            {activeTab === "builder" && canViewBuilder && (
               <TemplateEditor
                 project={activeProject}
                 newHeading={newHeading}
@@ -626,11 +822,13 @@ export default function ProjectTemplateBuilder() {
                 onUpdateSectionContent={updateSectionContent}
                 onUpdateSectionHeading={updateSectionHeading}
                 onApplyMyTemplate={applyMyTemplate}
+                isReadOnly={isReadOnly}
+                canDelete={canDelete}
               />
             )}
 
             {/* VIEW 2: LIVE PREVIEW */}
-            {activeTab === "preview" && (
+            {activeTab === "preview" && canViewPreview && (
               <LivePreview
                 projectName={activeProject.name}
                 generatedText={generateText()}
@@ -650,14 +848,38 @@ export default function ProjectTemplateBuilder() {
               content={generateText()}
             />
 
+            {/* INVITE FRIEND MODAL */}
+            <InviteFriendModal
+              isOpen={isInviteModalOpen}
+              onClose={() => setIsInviteModalOpen(false)}
+              projectId={activeProject.id}
+              projectName={activeProject.name}
+            />
+
             {/* VIEW 3: TASKS NOTEPAD */}
-            {activeTab === "tasks" && (
+            {activeTab === "tasks" && canViewTasks && (
               <TaskNotepad
                 project={activeProject}
+                userPermission={activeProject.currentUserPermission}
                 onUpdateTasks={updateActiveProjectTasks}
                 onManualSave={handleManualSaveTasks}
                 saveStatus={saveStatus}
               />
+            )}
+
+            {/* RESTRICTED ACCESS NOTICE */}
+            {((activeTab === "builder" && !canViewBuilder) ||
+              (activeTab === "preview" && !canViewPreview) ||
+              (activeTab === "tasks" && !canViewTasks)) && (
+              <div className="p-10 text-center bg-slate-900 border border-slate-800 rounded-2xl max-w-lg mx-auto space-y-3 my-8 shadow-xl">
+                <div className="w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 mx-auto text-xl">
+                  🔒
+                </div>
+                <h3 className="text-base font-bold text-white">Access Restricted</h3>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  The project owner has restricted your access to this module. Please use the navigation buttons above to access your permitted sections.
+                </p>
+              </div>
             )}
           </div>
         ) : (

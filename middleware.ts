@@ -6,10 +6,12 @@ const AUTH_COOKIE_NAME = "project_docs_auth";
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // 1. Always allow static files, internal Next.js assets, auth API, and public share links
+  // 1. Always allow static files, internal Next.js assets, auth API, invite routes, and public share links
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/api/auth") ||
+    pathname.startsWith("/invite") ||
+    pathname.startsWith("/api/invitations") ||
     pathname.startsWith("/share") ||
     pathname.startsWith("/api/share") ||
     pathname === "/favicon.ico"
@@ -23,6 +25,9 @@ export function middleware(request: NextRequest) {
 
   // 3. If unauthenticated and trying to access any page other than root (/), redirect to /
   if (!isAuthenticated && pathname !== "/") {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     const loginUrl = new URL("/", request.url);
     return NextResponse.redirect(loginUrl);
   }

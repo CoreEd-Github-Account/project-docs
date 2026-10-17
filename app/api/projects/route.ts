@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAllProjects, saveProject, deleteProject } from "@/lib/db";
+import { getAllProjects, saveProject, deleteProject, getProjectPermission } from "@/lib/db";
 import { getAuthenticatedUser } from "@/lib/auth";
 import type { Project } from "@/lib/types";
 
@@ -35,12 +35,22 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+
+    // Check project permissions if project already exists
+    const perm = await getProjectPermission(project.id, auth.user.id);
+    if (perm === "read") {
+      return NextResponse.json(
+        { error: "You have Read Only permission and cannot modify this project." },
+        { status: 403 }
+      );
+    }
+
     await saveProject(project, auth.user.id);
     return NextResponse.json({ success: true, project });
-  } catch (error) {
+  } catch (error: any) {
     console.error("POST /api/projects error:", error);
     return NextResponse.json(
-      { error: "Failed to save project" },
+      { error: error?.message || "Failed to save project" },
       { status: 500 }
     );
   }
@@ -61,12 +71,21 @@ export async function DELETE(request: Request) {
         { status: 400 }
       );
     }
+
+    const perm = await getProjectPermission(id, auth.user.id);
+    if (perm !== "owner" && perm !== "full") {
+      return NextResponse.json(
+        { error: "You do not have permission to delete this project (Full Access or Owner required)." },
+        { status: 403 }
+      );
+    }
+
     await deleteProject(id, auth.user.id);
     return NextResponse.json({ success: true, id });
-  } catch (error) {
+  } catch (error: any) {
     console.error("DELETE /api/projects error:", error);
     return NextResponse.json(
-      { error: "Failed to delete project" },
+      { error: error?.message || "Failed to delete project" },
       { status: 500 }
     );
   }
