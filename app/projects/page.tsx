@@ -9,6 +9,7 @@ import { TaskNotepad } from "@/components/TaskNotepad";
 import { LoginForm } from "@/components/LoginForm";
 import { ShareModal } from "@/components/ShareModal";
 import { InviteFriendModal } from "@/components/InviteFriendModal";
+import { NotificationBell } from "@/components/NotificationBell";
 import Link from "next/link";
 
 const MY_TEMPLATE_HEADINGS = [
@@ -80,7 +81,21 @@ export default function ProjectTemplateBuilder() {
         return prev;
       });
       if (!isSilent && data.length > 0) {
-        setActiveProjectId((curr) => curr || data[0].id);
+        if (typeof window !== "undefined") {
+          const urlParams = new URLSearchParams(window.location.search);
+          const qId = urlParams.get("projectId") || urlParams.get("id");
+          const qTab = urlParams.get("tab");
+          if (qId && data.some((p) => p.id === qId)) {
+            setActiveProjectId(qId);
+          } else {
+            setActiveProjectId((curr) => curr || data[0].id);
+          }
+          if (qTab === "tasks" || qTab === "builder" || qTab === "preview") {
+            setActiveTab(qTab);
+          }
+        } else {
+          setActiveProjectId((curr) => curr || data[0].id);
+        }
       }
     } catch (err) {
       console.error("Error loading projects from Supabase:", err);
@@ -677,7 +692,7 @@ export default function ProjectTemplateBuilder() {
                 {activeTab === "tasks" && (
                   <button
                     onClick={() => setIsInviteModalOpen(true)}
-                    title="Invite a friend to this project"
+                    title="Invite collaborators to this project"
                     className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white text-xs sm:text-sm font-semibold transition cursor-pointer shadow-sm hover:shadow-indigo-600/30"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -685,10 +700,10 @@ export default function ProjectTemplateBuilder() {
                         strokeLinecap="round"
                         strokeLinejoin="round"
                         strokeWidth={2}
-                        d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"
+                        d="M12 4v16m8-8H4"
                       />
                     </svg>
-                    <span>Invite Friend</span>
+                    <span>Invite</span>
                   </button>
                 )}
 
@@ -719,6 +734,9 @@ export default function ProjectTemplateBuilder() {
                     </span>
                   )}
                 </div>
+
+                {/* NOTIFICATION BELL IN HEADER */}
+                <NotificationBell />
 
                 {/* MANUAL SAVE BUTTON OR READ ONLY BADGE */}
                 {isReadOnly ? (

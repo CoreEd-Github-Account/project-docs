@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { LoginForm } from "@/components/LoginForm";
+import { NotificationBell } from "@/components/NotificationBell";
 
 interface WeatherData {
   temp: number;
@@ -195,6 +196,8 @@ export default function HomePortal() {
           </div>
 
           <div className="flex items-center gap-2">
+            <NotificationBell />
+
             <Link
               href="/settings"
               title="Settings & Theme Selector"

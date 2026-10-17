@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { LoginForm } from "@/components/LoginForm";
+import { NotificationBell } from "@/components/NotificationBell";
 import { THEME_PRESETS, getCurrentTheme } from "@/lib/theme";
 import type { UserProfile } from "@/lib/types";
 
@@ -121,6 +122,8 @@ export default function SettingsDashboard() {
           </div>
 
           <div className="flex items-center gap-2">
+            <NotificationBell />
+
             <Link
               href="/"
               className="text-xs text-slate-300 hover:text-white px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800/70 hover:bg-slate-800 transition flex items-center gap-1.5"

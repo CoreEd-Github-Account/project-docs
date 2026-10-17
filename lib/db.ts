@@ -17,6 +17,7 @@ import type {
   ProjectPermissionLevel,
   ProjectRole,
   ProjectViewTab,
+  TaskNotification,
 } from "./types";
 
 let poolInstance: Pool | null = null;
@@ -30,6 +31,7 @@ let sharedLinksInitialized = false;
 let settingsInitialized = false;
 let promptsInitialized = false;
 let invitationsInitialized = false;
+let notificationsInitialized = false;
 
 function resolveConnectionString(raw: string): string {
   try {
@@ -408,6 +410,7 @@ export async function ensureInvitationsAndMembersTablesExist(): Promise<void> {
     ALTER TABLE project_invitations ALTER COLUMN invited_user_email DROP NOT NULL;
     ALTER TABLE project_invitations ALTER COLUMN invited_user_email SET DEFAULT '';
     ALTER TABLE project_invitations ADD COLUMN IF NOT EXISTS allowed_views JSONB DEFAULT '["builder", "preview", "tasks"]'::jsonb;
+    ALTER TABLE project_invitations ADD COLUMN IF NOT EXISTS is_public BOOLEAN DEFAULT false;
     ALTER TABLE project_members ADD COLUMN IF NOT EXISTS allowed_views JSONB DEFAULT '["builder", "preview", "tasks"]'::jsonb;
   `);
   invitationsInitialized = true;
@@ -830,7 +833,9 @@ export async function createProjectInvitation(
   invitedUserName: string,
   invitedUserEmail: string | undefined | null,
   permissionLevel: ProjectPermissionLevel,
-  allowedViews: ProjectViewTab[] = ["builder", "preview", "tasks"]
+  allowedViews: ProjectViewTab[] = ["builder", "preview", "tasks"],
+  isPublic: boolean = false,
+  expiresInDays: number = 7
 ): Promise<{ invitation: ProjectInvitation; token: string }> {
   await ensureInvitationsAndMembersTablesExist();
   const pool = getPool();
@@ -838,8 +843,9 @@ export async function createProjectInvitation(
   const token = crypto.randomBytes(32).toString("hex");
   const tokenHash = hashInvitationToken(token);
   const id = crypto.randomUUID();
-  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 days
+  const expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000).toISOString();
   const cleanEmail = (invitedUserEmail || "").trim().toLowerCase();
+  const cleanName = (invitedUserName || "").trim() || (isPublic ? "Public Invite" : "Friend");
 
   const { rows } = await pool.query<{
     id: string;
@@ -852,23 +858,25 @@ export async function createProjectInvitation(
     status: "pending" | "accepted" | "expired" | "revoked";
     expires_at: Date | string;
     created_at: Date | string;
+    is_public: boolean;
   }>(
     `INSERT INTO project_invitations (
       id, invited_by_user_id, invited_user_name, invited_user_email,
-      project_id, permission_level, allowed_views, token_hash, status, expires_at, created_at, updated_at
+      project_id, permission_level, allowed_views, token_hash, status, expires_at, is_public, created_at, updated_at
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, 'pending', $9, NOW(), NOW())
-    RETURNING id, invited_by_user_id, invited_user_name, invited_user_email, project_id, permission_level, allowed_views, status, expires_at, created_at`,
+    VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, 'pending', $9, $10, NOW(), NOW())
+    RETURNING id, invited_by_user_id, invited_user_name, invited_user_email, project_id, permission_level, allowed_views, status, expires_at, created_at, is_public`,
     [
       id,
       invitedByUserId,
-      invitedUserName.trim(),
+      cleanName,
       cleanEmail || "",
       projectId,
       permissionLevel,
       JSON.stringify(allowedViews && allowedViews.length > 0 ? allowedViews : ["builder", "preview", "tasks"]),
       tokenHash,
       expiresAt,
+      isPublic,
     ]
   );
 
@@ -897,6 +905,7 @@ export async function createProjectInvitation(
     status: row.status,
     expiresAt: row.expires_at instanceof Date ? row.expires_at.toISOString() : String(row.expires_at),
     createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),
+    isPublic: Boolean(row.is_public),
   };
 
   return { invitation, token };
@@ -931,10 +940,12 @@ export async function getInvitationByToken(token: string): Promise<{
     project_name: string | null;
     inviter_username: string | null;
     inviter_fullname: string | null;
+    is_public: boolean;
   }>(
     `SELECT 
        pi.id, pi.invited_by_user_id, pi.invited_user_name, pi.invited_user_email,
        pi.project_id, pi.permission_level, pi.allowed_views, pi.status, pi.expires_at, pi.accepted_at, pi.created_at,
+       COALESCE(pi.is_public, false) as is_public,
        p.name as project_name,
        u.username as inviter_username,
        u.full_name as inviter_fullname
@@ -953,6 +964,7 @@ export async function getInvitationByToken(token: string): Promise<{
   const row = rows[0];
   const expiresAtDate = new Date(row.expires_at);
   const isExpired = expiresAtDate.getTime() <= Date.now();
+  const isPublic = Boolean(row.is_public);
 
   let parsedViews: ProjectViewTab[] = ["builder", "preview", "tasks"];
   if (row.allowed_views) {
@@ -980,9 +992,10 @@ export async function getInvitationByToken(token: string): Promise<{
     expiresAt: expiresAtDate.toISOString(),
     acceptedAt: row.accepted_at ? (row.accepted_at instanceof Date ? row.accepted_at.toISOString() : String(row.accepted_at)) : undefined,
     createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),
+    isPublic,
   };
 
-  if (row.status === "accepted") {
+  if (row.status === "accepted" && !isPublic) {
     return { invitation, projectName: row.project_name || "Project", error: "already_accepted" };
   }
   if (row.status === "revoked") {
@@ -1018,8 +1031,9 @@ export async function acceptProjectInvitation(
       allowed_views: unknown;
       status: string;
       expires_at: Date;
+      is_public: boolean;
     }>(
-      "SELECT id, project_id, permission_level, allowed_views, status, expires_at FROM project_invitations WHERE token_hash = $1 FOR UPDATE",
+      "SELECT id, project_id, permission_level, allowed_views, status, expires_at, COALESCE(is_public, false) as is_public FROM project_invitations WHERE token_hash = $1 FOR UPDATE",
       [tokenHash]
     );
 
@@ -1029,7 +1043,7 @@ export async function acceptProjectInvitation(
     }
 
     const inv = invRows[0];
-    if (inv.status === "accepted") {
+    if (inv.status === "accepted" && !inv.is_public) {
       await client.query("ROLLBACK");
       return { success: false, error: "This invitation link has already been used." };
     }
@@ -1066,13 +1080,22 @@ export async function acceptProjectInvitation(
       [inv.project_id, userId, inv.permission_level, JSON.stringify(parsedViews)]
     );
 
-    // Mark invitation as accepted
-    await client.query(
-      `UPDATE project_invitations
-       SET status = 'accepted', accepted_at = NOW(), updated_at = NOW()
-       WHERE id = $1`,
-      [inv.id]
-    );
+    // If it's a personal invitation, mark as accepted; if it's a public link, keep it pending (active) so others can use it too!
+    if (!inv.is_public) {
+      await client.query(
+        `UPDATE project_invitations
+         SET status = 'accepted', accepted_at = NOW(), updated_at = NOW()
+         WHERE id = $1`,
+        [inv.id]
+      );
+    } else {
+      await client.query(
+        `UPDATE project_invitations
+         SET accepted_at = NOW(), updated_at = NOW()
+         WHERE id = $1`,
+        [inv.id]
+      );
+    }
 
     await client.query("COMMIT");
     return { success: true, projectId: inv.project_id };
@@ -1108,8 +1131,9 @@ export async function getProjectInvitations(
     expires_at: Date | string;
     accepted_at: Date | string | null;
     created_at: Date | string;
+    is_public: boolean;
   }>(
-    `SELECT id, invited_by_user_id, invited_user_name, invited_user_email, project_id, permission_level, allowed_views, status, expires_at, accepted_at, created_at
+    `SELECT id, invited_by_user_id, invited_user_name, invited_user_email, project_id, permission_level, allowed_views, status, expires_at, accepted_at, created_at, COALESCE(is_public, false) as is_public
      FROM project_invitations
      WHERE project_id = $1
      ORDER BY created_at DESC`,
@@ -1134,7 +1158,7 @@ export async function getProjectInvitations(
       id: r.id,
       invitedByUserId: r.invited_by_user_id,
       invitedUserName: r.invited_user_name,
-      invitedUserEmail: r.invited_user_email,
+      invitedUserEmail: r.invited_user_email || undefined,
       projectId: r.project_id,
       permissionLevel: r.permission_level,
       allowedViews: parsedViews,
@@ -1142,6 +1166,7 @@ export async function getProjectInvitations(
       expiresAt: r.expires_at instanceof Date ? r.expires_at.toISOString() : String(r.expires_at),
       acceptedAt: r.accepted_at ? (r.accepted_at instanceof Date ? r.accepted_at.toISOString() : String(r.accepted_at)) : undefined,
       createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
+      isPublic: Boolean(r.is_public),
     };
   });
 }
@@ -1805,6 +1830,223 @@ export async function deletePrompt(id: string, userId: string): Promise<void> {
   await ensurePromptsTableExists();
   const pool = getPool();
   await pool.query("DELETE FROM prompts WHERE id = $1 AND user_id = $2", [id, userId]);
+}
+
+// ==========================================
+// NOTIFICATIONS TABLE & RELATIONAL LIVE SYNC
+// ==========================================
+export async function ensureNotificationsTableExists(): Promise<void> {
+  if (notificationsInitialized) return;
+  await ensureUsersTableExists();
+  await ensureTableExists();
+  await ensureInvitationsAndMembersTablesExist();
+  const pool = getPool();
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      task_id TEXT,
+      actor_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      type TEXT NOT NULL DEFAULT 'task_created',
+      title TEXT NOT NULL DEFAULT 'New Task Created',
+      message TEXT NOT NULL,
+      is_read BOOLEAN NOT NULL DEFAULT false,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
+    CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_notifications_project_id ON notifications(project_id);
+    CREATE INDEX IF NOT EXISTS idx_notifications_user_unread ON notifications(user_id, is_read);
+  `);
+  notificationsInitialized = true;
+}
+
+export async function notifyProjectMembersOnTaskCreated({
+  projectId,
+  taskId,
+  taskHeading,
+  actorUserId,
+}: {
+  projectId: string;
+  taskId: string;
+  taskHeading: string;
+  actorUserId: string;
+}): Promise<void> {
+  await ensureNotificationsTableExists();
+  const pool = getPool();
+
+  // 1. Fetch project name and owner
+  const { rows: projRows } = await pool.query<{ name: string; user_id: string | null }>(
+    "SELECT name, user_id FROM projects WHERE id = $1 LIMIT 1",
+    [projectId]
+  );
+  if (projRows.length === 0) return;
+  const project = projRows[0];
+  const projectName = project.name || "Untitled Project";
+
+  // 2. Fetch actor info (creator of task)
+  const { rows: actorRows } = await pool.query<{ username: string; full_name: string | null }>(
+    "SELECT username, full_name FROM users WHERE id = $1 LIMIT 1",
+    [actorUserId]
+  );
+  const actorName = actorRows.length > 0
+    ? (actorRows[0].full_name || actorRows[0].username || "A collaborator")
+    : "A collaborator";
+
+  // 3. Find all member user IDs in this project only
+  const recipientIds = new Set<string>();
+
+  // If project owner is another user, add them
+  if (project.user_id && project.user_id !== actorUserId) {
+    recipientIds.add(project.user_id);
+  }
+
+  // Collaborators in project_members
+  const { rows: memberRows } = await pool.query<{ user_id: string }>(
+    "SELECT user_id FROM project_members WHERE project_id = $1",
+    [projectId]
+  );
+  for (const m of memberRows) {
+    if (m.user_id !== actorUserId) {
+      recipientIds.add(m.user_id);
+    }
+  }
+
+  // If no other members on this project, no notification needs to be sent
+  if (recipientIds.size === 0) return;
+
+  const title = "New Task Created";
+  const message = `${actorName} created task "${taskHeading}"`;
+
+  for (const recipientId of recipientIds) {
+    await pool.query(
+      `INSERT INTO notifications (user_id, project_id, task_id, actor_id, type, title, message, is_read, created_at)
+       VALUES ($1, $2, $3, $4, 'task_created', $5, $6, false, NOW())`,
+      [recipientId, projectId, taskId, actorUserId, title, message]
+    );
+  }
+}
+
+export async function getNotificationsByUser(userId: string): Promise<TaskNotification[]> {
+  await ensureNotificationsTableExists();
+  const pool = getPool();
+
+  const { rows } = await pool.query<{
+    id: string;
+    user_id: string;
+    project_id: string;
+    task_id: string | null;
+    actor_id: string;
+    type: string;
+    title: string;
+    message: string;
+    is_read: boolean;
+    created_at: Date | string;
+    project_name: string | null;
+    actor_username: string | null;
+    actor_fullname: string | null;
+    actor_avatar: string | null;
+  }>(
+    `SELECT 
+       n.id,
+       n.user_id,
+       n.project_id,
+       n.task_id,
+       n.actor_id,
+       n.type,
+       n.title,
+       n.message,
+       n.is_read,
+       n.created_at,
+       COALESCE(p.name, 'Untitled Project') AS project_name,
+       u.username AS actor_username,
+       u.full_name AS actor_fullname,
+       u.avatar_url AS actor_avatar
+     FROM notifications n
+     LEFT JOIN projects p ON p.id = n.project_id
+     LEFT JOIN users u ON u.id = n.actor_id
+     WHERE n.user_id = $1
+     ORDER BY n.created_at DESC
+     LIMIT 150`,
+    [userId]
+  );
+
+  return rows.map((r) => ({
+    id: r.id,
+    userId: r.user_id,
+    projectId: r.project_id,
+    projectName: r.project_name || "Untitled Project",
+    taskId: r.task_id || undefined,
+    taskHeading: r.title,
+    actorId: r.actor_id,
+    actorName: r.actor_username || "Collaborator",
+    actorFullName: r.actor_fullname || r.actor_username || "Collaborator",
+    actorAvatar: r.actor_avatar || undefined,
+    type: r.type,
+    title: r.title,
+    message: r.message,
+    isRead: Boolean(r.is_read),
+    createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
+  }));
+}
+
+export async function getUnreadNotificationCount(userId: string): Promise<number> {
+  await ensureNotificationsTableExists();
+  const pool = getPool();
+  const { rows } = await pool.query<{ count: string }>(
+    "SELECT COUNT(*)::text as count FROM notifications WHERE user_id = $1 AND is_read = false",
+    [userId]
+  );
+  return parseInt(rows[0]?.count || "0", 10);
+}
+
+export async function markNotificationRead(id: string, userId: string): Promise<boolean> {
+  await ensureNotificationsTableExists();
+  const pool = getPool();
+  const res = await pool.query(
+    "UPDATE notifications SET is_read = true WHERE id = $1 AND user_id = $2",
+    [id, userId]
+  );
+  return (res.rowCount ?? 0) > 0;
+}
+
+export async function markNotificationUnread(id: string, userId: string): Promise<boolean> {
+  await ensureNotificationsTableExists();
+  const pool = getPool();
+  const res = await pool.query(
+    "UPDATE notifications SET is_read = false WHERE id = $1 AND user_id = $2",
+    [id, userId]
+  );
+  return (res.rowCount ?? 0) > 0;
+}
+
+export async function markAllNotificationsRead(userId: string): Promise<void> {
+  await ensureNotificationsTableExists();
+  const pool = getPool();
+  await pool.query(
+    "UPDATE notifications SET is_read = true WHERE user_id = $1 AND is_read = false",
+    [userId]
+  );
+}
+
+export async function deleteNotification(id: string, userId: string): Promise<boolean> {
+  await ensureNotificationsTableExists();
+  const pool = getPool();
+  const res = await pool.query(
+    "DELETE FROM notifications WHERE id = $1 AND user_id = $2",
+    [id, userId]
+  );
+  return (res.rowCount ?? 0) > 0;
+}
+
+export async function clearAllNotifications(userId: string): Promise<void> {
+  await ensureNotificationsTableExists();
+  const pool = getPool();
+  await pool.query(
+    "DELETE FROM notifications WHERE user_id = $1",
+    [userId]
+  );
 }
 
 

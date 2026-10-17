@@ -93,9 +93,10 @@ export async function POST(request: Request) {
       );
 
       // Set full name if provided
-      if (invitation.invitedUserName) {
+      const userFullName = (username || "").trim() || (!invitation.isPublic ? invitation.invitedUserName : "");
+      if (userFullName) {
         await updateUserProfile(user.id, {
-          fullName: invitation.invitedUserName,
+          fullName: userFullName,
         });
       }
     }

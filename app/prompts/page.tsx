@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { LoginForm } from "@/components/LoginForm";
+import { NotificationBell } from "@/components/NotificationBell";
 import type { SavedPrompt } from "@/lib/types";
 
 export default function PromptsPage() {
@@ -253,6 +254,7 @@ export default function PromptsPage() {
             >
               <span>+ Add Prompt</span>
             </button>
+            <NotificationBell />
             <Link
               href="/settings"
               className="p-1.5 rounded-lg border border-slate-700 bg-slate-800/60 hover:bg-slate-800 text-slate-300 hover:text-white transition flex items-center justify-center"

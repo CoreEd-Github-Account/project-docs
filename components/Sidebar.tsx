@@ -44,6 +44,28 @@ export function Sidebar({
   const [userName, setUserName] = React.useState<string>(username || "");
   const [userFullName, setUserFullName] = React.useState<string>(initialFullName || "");
   const [userAvatar, setUserAvatar] = React.useState<string>("👤");
+  const [unreadNotifs, setUnreadNotifs] = React.useState<number>(0);
+
+  React.useEffect(() => {
+    let isMounted = true;
+    async function checkNotifs() {
+      try {
+        const res = await fetch("/api/notifications");
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted && typeof data.unreadCount === "number") {
+            setUnreadNotifs(data.unreadCount);
+          }
+        }
+      } catch {}
+    }
+    checkNotifs();
+    const interval = setInterval(checkNotifs, 4000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
 
   React.useEffect(() => {
     if (username) {
@@ -470,13 +492,25 @@ export function Sidebar({
                 <span>v1.0</span>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 pt-0.5">
+              <div className="grid grid-cols-3 gap-1.5 pt-0.5">
                 <Link
                   href="/"
                   title="Workspace Hub"
                   className="flex items-center justify-center py-1.5 px-2 bg-slate-800/80 hover:bg-slate-800 hover:text-white text-slate-300 rounded-md transition text-xs font-medium cursor-pointer"
                 >
                   Hub
+                </Link>
+                <Link
+                  href="/notifications"
+                  title="Task Notifications"
+                  className="relative flex items-center justify-center py-1.5 px-2 bg-slate-800/80 hover:bg-slate-800 hover:text-white text-slate-300 rounded-md transition text-xs font-medium cursor-pointer"
+                >
+                  <span>Alerts</span>
+                  {unreadNotifs > 0 && (
+                    <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[16px] h-[16px] px-1 text-[9px] font-extrabold text-white bg-rose-600 rounded-full border border-slate-950 animate-pulse">
+                      {unreadNotifs > 9 ? "9+" : unreadNotifs}
+                    </span>
+                  )}
                 </Link>
                 <Link
                   href="/settings"
@@ -520,6 +554,26 @@ export function Sidebar({
                 <span className="text-base">{userAvatar || "👤"}</span>
                 <span className="absolute bottom-1 right-1 w-2 h-2 rounded-full bg-emerald-400 border border-slate-900" />
               </Link>
+
+              <Link
+                href="/notifications"
+                title={`Notifications (${unreadNotifs} unread)`}
+                className="relative w-10 h-10 rounded-xl bg-slate-800/80 hover:bg-slate-800 hover:text-white text-slate-300 flex items-center justify-center transition cursor-pointer"
+                aria-label="Notifications"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
+                  />
+                </svg>
+                {unreadNotifs > 0 && (
+                  <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-rose-500 animate-pulse border border-slate-900" />
+                )}
+              </Link>
+
               <Link
                 href="/"
                 title="Workspace Hub"

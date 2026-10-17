@@ -21,14 +21,15 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { projectId, friendName, friendEmail, permissionLevel, allowedViews } = body;
+    const { projectId, friendName, friendEmail, permissionLevel, allowedViews, isPublic, expiresInDays } = body;
 
     if (!projectId || typeof projectId !== "string") {
       return NextResponse.json({ error: "Project ID is required." }, { status: 400 });
     }
 
-    const cleanName = (friendName || "").trim();
-    if (!cleanName) {
+    const isPublicLink = Boolean(isPublic);
+    const cleanName = (friendName || "").trim() || (isPublicLink ? "Public Link" : "");
+    if (!cleanName && !isPublicLink) {
       return NextResponse.json({ error: "Friend name is required." }, { status: 400 });
     }
 
@@ -67,13 +68,17 @@ export async function POST(request: Request) {
       );
     }
 
+    const daysToExpire = typeof expiresInDays === "number" && expiresInDays > 0 ? expiresInDays : (isPublicLink ? 30 : 7);
+
     const { invitation, token } = await createProjectInvitation(
       auth.user.id,
       projectId,
       cleanName,
-      cleanEmail,
+      isPublicLink ? "" : cleanEmail,
       permissionLevel as ProjectPermissionLevel,
-      validatedViews
+      validatedViews,
+      isPublicLink,
+      daysToExpire
     );
 
     // Construct full invitation link

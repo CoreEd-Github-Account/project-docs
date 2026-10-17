@@ -12,6 +12,7 @@ interface InvitationData {
   projectName: string;
   inviterName: string;
   expiresAt: string;
+  isPublic?: boolean;
 }
 
 interface ExistingUserData {
@@ -56,7 +57,10 @@ function InviteAcceptContent() {
           setErrorStatus(data.error || "invalid");
         } else {
           setInvitation(data.invitation);
-          const initialName = data.invitation.invitedUserName || data.existingUser?.fullName || data.existingUser?.username || "";
+          const isPublicLink = Boolean(data.invitation.isPublic);
+          const initialName = isPublicLink
+            ? (data.existingUser?.fullName || data.existingUser?.username || "")
+            : (data.invitation.invitedUserName || data.existingUser?.fullName || data.existingUser?.username || "");
           setName(initialName);
           if (data.invitation.invitedUserEmail) {
             setCustomEmail(data.invitation.invitedUserEmail);
@@ -262,6 +266,14 @@ function InviteAcceptContent() {
                   {getPermissionLabel(invitation.permissionLevel)}
                 </span>
               </div>
+              {invitation.isPublic && (
+                <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-800/80">
+                  <span className="text-slate-400">Invitation Type:</span>
+                  <span className="px-2 py-0.5 rounded font-semibold text-[11px] uppercase bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                    Public Link (General Access)
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Notification if User Already Has an Account */}

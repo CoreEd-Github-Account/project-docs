@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
-import { getTasksByProject, saveTask, deleteTask, getProjectPermission } from "@/lib/db";
+import {
+  getTasksByProject,
+  saveTask,
+  deleteTask,
+  getProjectPermission,
+  notifyProjectMembersOnTaskCreated,
+} from "@/lib/db";
 import { getAuthenticatedUser } from "@/lib/auth";
 import type { TaskItem, TaskStage } from "@/lib/types";
 
@@ -104,6 +110,19 @@ export async function POST(request: Request) {
     };
 
     await saveTask(newTask, projectId, auth.user.id);
+
+    // Live Sync Notification: Notify only members of this project (excluding the creator)
+    try {
+      await notifyProjectMembersOnTaskCreated({
+        projectId,
+        taskId: newTask.id,
+        taskHeading: taskHeading,
+        actorUserId: auth.user.id,
+      });
+    } catch (notifErr) {
+      console.error("Failed to notify project members on task creation:", notifErr);
+    }
+
     return NextResponse.json({ success: true, task: newTask }, { status: 201 });
   } catch (error) {
     console.error("POST /api/tasks error:", error);

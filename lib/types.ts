@@ -78,6 +78,7 @@ export interface ProjectInvitation {
   expiresAt: string;
   acceptedAt?: string;
   createdAt: string;
+  isPublic?: boolean;
 }
 
 export interface ProjectMember {
@@ -155,5 +156,23 @@ export interface SavedPrompt {
   createdAt: string;
   updatedAt?: string;
   userId?: string;
+}
+
+export interface TaskNotification {
+  id: string;
+  userId: string;
+  projectId: string;
+  projectName?: string;
+  taskId?: string;
+  taskHeading?: string;
+  actorId: string;
+  actorName?: string;
+  actorFullName?: string;
+  actorAvatar?: string;
+  type: string;
+  title: string;
+  message: string;
+  isRead: boolean;
+  createdAt: string;
 }
 
