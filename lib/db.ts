@@ -596,6 +596,7 @@ export async function getTasksByProject(
   userId?: string | null
 ): Promise<TaskItem[]> {
   if (!projectId) return [];
+  const safeUserId = (userId && typeof userId === "string") ? userId : undefined;
   await ensureTasksTableExists();
   await ensureInvitationsAndMembersTablesExist();
 
@@ -627,7 +628,7 @@ export async function getTasksByProject(
     return rows.map((r) => ({
       id: r.id,
       projectId: r.project_id,
-      userId: r.user_id || userId,
+      userId: r.user_id || safeUserId,
       title: r.heading || r.title,
       heading: r.heading || r.title,
       description: r.description || "",
@@ -695,7 +696,7 @@ export async function getTasksByProject(
         items.push({
           id: `task-legacy-${i}-${projectId}`,
           projectId,
-          userId,
+          userId: safeUserId,
           title: heading,
           heading: heading,
           description: "",
