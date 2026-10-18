@@ -35,6 +35,7 @@ export interface TaskItem {
   createdAt?: number;
   projectId?: string;
   userId?: string;
+  folder?: string;
 }
 
 export interface TaskMessage {
@@ -63,6 +64,7 @@ export interface Project {
   currentUserPermission?: ProjectRole;
   isOwner?: boolean;
   allowedViews?: ProjectViewTab[];
+  taskFolders?: string[];
 }
 
 export interface ProjectInvitation {

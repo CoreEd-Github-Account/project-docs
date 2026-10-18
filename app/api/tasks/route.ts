@@ -64,6 +64,7 @@ export async function POST(request: Request) {
       endDate,
       end_date,
       id,
+      folder,
     } = body;
     const taskHeading = (heading || title || "").trim();
 
@@ -109,6 +110,7 @@ export async function POST(request: Request) {
       startDate: String(startDate || start_date || "").trim(),
       endDate: String(endDate || end_date || "").trim(),
       createdAt: Number(body.createdAt) || Date.now(),
+      folder: folder !== undefined ? String(folder).trim() : "",
     };
 
     await saveTask(newTask, projectId, auth.user.id);
@@ -157,6 +159,7 @@ export async function PUT(request: Request) {
       endDate,
       end_date,
       createdAt,
+      folder,
     } = body;
     let taskHeading = (heading || title || "").trim();
     let taskDescription = description !== undefined ? String(description).trim() : undefined;
@@ -169,6 +172,7 @@ export async function PUT(request: Request) {
     let taskStartDate = startDate || start_date;
     let taskEndDate = endDate || end_date;
     let taskCreatedAt = createdAt ? Number(createdAt) : undefined;
+    let taskFolder = folder !== undefined ? String(folder).trim() : undefined;
 
     if (!id || !projectId) {
       return NextResponse.json(
@@ -188,8 +192,9 @@ export async function PUT(request: Request) {
       end_date: string;
       created_at: string | number;
       stage: TaskStage;
+      folder: string | null;
     }>(
-      "SELECT heading, title, description, comments, start_date, end_date, created_at, stage FROM tasks WHERE id = $1 LIMIT 1",
+      "SELECT heading, title, description, comments, start_date, end_date, created_at, stage, folder FROM tasks WHERE id = $1 LIMIT 1",
       [id]
     );
 
@@ -205,6 +210,7 @@ export async function PUT(request: Request) {
       if (!taskStartDate) taskStartDate = existingRows[0].start_date || "";
       if (!taskEndDate) taskEndDate = existingRows[0].end_date || "";
       if (!taskCreatedAt) taskCreatedAt = Number(existingRows[0].created_at) || Date.now();
+      if (taskFolder === undefined) taskFolder = existingRows[0].folder || "";
     }
 
     if (!taskHeading) {
@@ -244,6 +250,7 @@ export async function PUT(request: Request) {
       startDate: String(taskStartDate || "").trim(),
       endDate: String(taskEndDate || "").trim(),
       createdAt: Number(taskCreatedAt) || Date.now(),
+      folder: String(taskFolder || "").trim(),
     };
 
     await saveTask(updatedTask, projectId, auth.user.id);

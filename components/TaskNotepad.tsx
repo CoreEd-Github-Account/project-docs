@@ -6,6 +6,7 @@ import type { Project, TaskItem, TaskStage, TaskComment, TaskSubComment, Project
 interface TaskNotepadProps {
   project: Project;
   onUpdateTasks: (tasks: string) => void;
+  onUpdateProjectFolders?: (folders: string[]) => void;
   onManualSave?: () => void;
   saveStatus: "saved" | "unsaved" | "saving" | "error";
   userPermission?: ProjectRole;
@@ -219,6 +220,7 @@ function parseTasksFromText(rawText: string, projectId?: string): TaskItem[] {
               startDate: String(item.startDate || item.start_date || "").trim(),
               endDate: String(item.endDate || item.end_date || "").trim(),
               createdAt: Number(item.createdAt) || Date.now(),
+              folder: String(item.folder || "").trim(),
             };
           });
       }
@@ -260,6 +262,13 @@ function parseTasksFromText(rawText: string, projectId?: string): TaskItem[] {
       const endMatch = line.match(/end(?:\s*date)?:\s*([^\s|,]+)/i);
       if (startMatch) currentTask.startDate = startMatch[1];
       if (endMatch) currentTask.endDate = endMatch[1];
+      continue;
+    }
+
+    // Check for Folder metadata: e.g. "> Folder: Backend"
+    const folderMatch = trimmedLine.match(/^>?\s*folders?:\s*(.*)$/i);
+    if (folderMatch && currentTask) {
+      currentTask.folder = folderMatch[1].trim();
       continue;
     }
 
@@ -366,6 +375,7 @@ function tasksToMarkdown(items: TaskItem[]): string {
         .join(" | ");
       s += `  > Timeline: ${dates}\n`;
     }
+    if (t.folder) s += `  > Folder: ${t.folder}\n`;
     if (t.description) s += `  > Description: ${t.description}\n`;
     const commentsList = parseComments(t.comments, t.createdAt);
     if (commentsList.length > 0) {
@@ -420,6 +430,7 @@ function tasksToMarkdown(items: TaskItem[]): string {
 export function TaskNotepad({
   project,
   onUpdateTasks,
+  onUpdateProjectFolders,
   onManualSave,
   saveStatus,
   userPermission,
@@ -431,6 +442,20 @@ export function TaskNotepad({
   const canDelete = role === "owner" || role === "full";
   const canEdit = !isReadOnly;
 
+  // Folder states
+  const [folders, setFolders] = useState<string[]>(() => project.taskFolders || []);
+  const [activeFolder, setActiveFolder] = useState<string>("all");
+  const [isAddFolderModalOpen, setIsAddFolderModalOpen] = useState(false);
+  const [newFolderInput, setNewFolderInput] = useState("");
+  const [folderToRename, setFolderToRename] = useState<string | null>(null);
+  const [renameFolderInput, setRenameFolderInput] = useState("");
+
+  useEffect(() => {
+    if (project.taskFolders) {
+      setFolders(project.taskFolders);
+    }
+  }, [project.taskFolders]);
+
   // Main tasks state
   const [tasks, setTasks] = useState<TaskItem[]>(() =>
     parseTasksFromText(project.tasks ?? "", project.id)
@@ -440,13 +465,16 @@ export function TaskNotepad({
   const [isDbLoading, setIsDbLoading] = useState(false);
   const [dbNotice, setDbNotice] = useState<string | null>(null);
 
-  // Modal Form state: (heading, description, status, comments, start date & end date)
+  // Modal Form state: (heading, description, status, comments, start date & end date, folder)
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [formHeading, setFormHeading] = useState("");
   const [formDescription, setFormDescription] = useState("");
   const [formStatus, setFormStatus] = useState<TaskStage>("inprogress");
+  const [formFolder, setFormFolder] = useState<string>("");
+  const [isCreatingInlineFolder, setIsCreatingInlineFolder] = useState(false);
+  const [inlineFolderInput, setInlineFolderInput] = useState("");
   const [formCommentsList, setFormCommentsList] = useState<TaskComment[]>([]);
   const [formNewComment, setFormNewComment] = useState("");
   const [formStartDate, setFormStartDate] = useState("");
@@ -938,6 +966,168 @@ export function TaskNotepad({
     }
   };
 
+  // Add a new folder to current project
+  const handleAddFolder = async (folderName: string) => {
+    const cleanName = folderName.trim();
+    if (!cleanName || folders.includes(cleanName) || isReadOnly) return;
+    const updatedFolders = [...folders, cleanName];
+    setFolders(updatedFolders);
+    setActiveFolder(cleanName);
+    if (onUpdateProjectFolders) {
+      onUpdateProjectFolders(updatedFolders);
+    }
+    // Live sync project to DB
+    try {
+      await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...project,
+          taskFolders: updatedFolders,
+        }),
+      });
+      setDbNotice(`Folder "${cleanName}" created`);
+      setTimeout(() => setDbNotice(null), 2500);
+    } catch (err) {
+      console.error("Failed to sync new folder:", err);
+    }
+  };
+
+  // Rename an existing folder
+  const handleRenameFolder = async (oldName: string, newName: string) => {
+    const cleanNew = newName.trim();
+    if (!cleanNew || cleanNew === oldName || isReadOnly) return;
+    const updatedFolders = folders.map((f) => (f === oldName ? cleanNew : f));
+    setFolders(updatedFolders);
+    if (activeFolder === oldName) setActiveFolder(cleanNew);
+    if (onUpdateProjectFolders) {
+      onUpdateProjectFolders(updatedFolders);
+    }
+
+    // Update all tasks in this folder
+    const tasksToUpdate = tasks.filter((t) => (t.folder || "").toLowerCase() === oldName.toLowerCase());
+    const updatedTasks = tasks.map((t) =>
+      (t.folder || "").toLowerCase() === oldName.toLowerCase() ? { ...t, folder: cleanNew } : t
+    );
+    commitTasks(updatedTasks);
+
+    // Live sync project & affected tasks
+    try {
+      await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...project,
+          taskFolders: updatedFolders,
+        }),
+      });
+      for (const t of tasksToUpdate) {
+        await fetch("/api/tasks", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...t,
+            folder: cleanNew,
+            projectId: project.id,
+          }),
+        });
+      }
+      setDbNotice(`Folder renamed to "${cleanNew}"`);
+      setTimeout(() => setDbNotice(null), 2500);
+    } catch (err) {
+      console.error("Failed to rename folder:", err);
+    }
+  };
+
+  // Delete a folder (tasks move to general/unassigned)
+  const handleDeleteFolder = async (folderName: string) => {
+    if (isReadOnly) return;
+    const confirmed = confirm(
+      `Are you sure you want to delete folder "${folderName}"? Tasks inside will be moved to General (Unassigned).`
+    );
+    if (!confirmed) return;
+
+    const updatedFolders = folders.filter((f) => f !== folderName);
+    setFolders(updatedFolders);
+    if (activeFolder === folderName) setActiveFolder("all");
+    if (onUpdateProjectFolders) {
+      onUpdateProjectFolders(updatedFolders);
+    }
+
+    // Move tasks in this folder to "" (unassigned)
+    const tasksToUpdate = tasks.filter((t) => (t.folder || "").toLowerCase() === folderName.toLowerCase());
+    const updatedTasks = tasks.map((t) =>
+      (t.folder || "").toLowerCase() === folderName.toLowerCase() ? { ...t, folder: "" } : t
+    );
+    commitTasks(updatedTasks);
+
+    // Live sync project & affected tasks
+    try {
+      await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...project,
+          taskFolders: updatedFolders,
+        }),
+      });
+      for (const t of tasksToUpdate) {
+        await fetch("/api/tasks", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...t,
+            folder: "",
+            projectId: project.id,
+          }),
+        });
+      }
+      setDbNotice(`Folder "${folderName}" deleted`);
+      setTimeout(() => setDbNotice(null), 2500);
+    } catch (err) {
+      console.error("Failed to delete folder:", err);
+    }
+  };
+
+  // Move task to a different folder
+  const handleChangeTaskFolder = async (taskId: string, newFolder: string) => {
+    if (isReadOnly) return;
+    const task = tasks.find((t) => t.id === taskId);
+    if (!task) return;
+
+    const cleanFolder = newFolder === "__general__" || newFolder === "__none__" ? "" : newFolder.trim();
+    const updatedTasks = tasks.map((t) =>
+      t.id === taskId ? { ...t, folder: cleanFolder } : t
+    );
+    commitTasks(updatedTasks);
+
+    try {
+      const res = await fetch("/api/tasks", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: task.id,
+          projectId: project.id,
+          heading: task.heading || task.title,
+          title: task.heading || task.title,
+          description: task.description || "",
+          stage: task.stage,
+          comments: task.comments || "",
+          startDate: task.startDate || "",
+          endDate: task.endDate || "",
+          createdAt: task.createdAt,
+          folder: cleanFolder,
+        }),
+      });
+      if (res.ok) {
+        setDbNotice(`Task moved to ${cleanFolder ? `"${cleanFolder}"` : "General"}`);
+        setTimeout(() => setDbNotice(null), 2500);
+      }
+    } catch (err) {
+      console.error("Failed to update task folder:", err);
+    }
+  };
+
   // Open Form Modal for Creating a New Task
   const openCreateForm = (stagePreset?: TaskStage) => {
     if (isReadOnly) return;
@@ -946,6 +1136,9 @@ export function TaskNotepad({
     setFormHeading("");
     setFormDescription("");
     setFormStatus(stagePreset || (filterStage !== "all" ? filterStage : "inprogress"));
+    setFormFolder(activeFolder !== "all" && activeFolder !== "general" ? activeFolder : "");
+    setIsCreatingInlineFolder(false);
+    setInlineFolderInput("");
     setFormCommentsList([]);
     setFormNewComment("");
     setFormStartDate("");
@@ -962,6 +1155,9 @@ export function TaskNotepad({
     setFormHeading(task.heading || task.title || "");
     setFormDescription(task.description || "");
     setFormStatus(task.stage);
+    setFormFolder(task.folder || "");
+    setIsCreatingInlineFolder(false);
+    setInlineFolderInput("");
     setFormCommentsList(parseComments(task.comments));
     setFormNewComment("");
     setFormStartDate(task.startDate || "");
@@ -1018,6 +1214,7 @@ export function TaskNotepad({
           startDate: formStartDate.trim(),
           endDate: formEndDate.trim(),
           createdAt: Date.now(),
+          folder: formFolder.trim(),
         };
 
         // 1. Optimistic UI update
@@ -1041,6 +1238,7 @@ export function TaskNotepad({
             startDate: newTask.startDate,
             endDate: newTask.endDate,
             createdAt: newTask.createdAt,
+            folder: newTask.folder,
           }),
         });
 
@@ -1069,6 +1267,7 @@ export function TaskNotepad({
           startDate: formStartDate.trim(),
           endDate: formEndDate.trim(),
           createdAt: existingTask?.createdAt || Date.now(),
+          folder: formFolder.trim(),
         };
 
         // 1. Optimistic UI update
@@ -1093,6 +1292,7 @@ export function TaskNotepad({
             startDate: updatedTask.startDate,
             endDate: updatedTask.endDate,
             createdAt: updatedTask.createdAt,
+            folder: updatedTask.folder,
           }),
         });
 
@@ -1255,13 +1455,27 @@ export function TaskNotepad({
 
   // Filtered tasks for list view
   const filteredTasks = tasks.filter((t) => {
+    // 1. Folder filtering
+    if (activeFolder !== "all") {
+      if (activeFolder === "general") {
+        if (t.folder && t.folder.trim() !== "") return false;
+      } else {
+        if ((t.folder || "").toLowerCase() !== activeFolder.toLowerCase()) return false;
+      }
+    }
+
+    // 2. Stage filtering
     const matchesFilter = filterStage === "all" || t.stage === filterStage;
+
+    // 3. Search filtering
     const query = searchQuery.toLowerCase().trim();
     const matchesSearch =
       !query ||
       (t.heading || t.title || "").toLowerCase().includes(query) ||
       (t.description || "").toLowerCase().includes(query) ||
+      (t.folder || "").toLowerCase().includes(query) ||
       (t.comments || "").toLowerCase().includes(query);
+
     return matchesFilter && matchesSearch;
   });
 
@@ -1321,30 +1535,44 @@ export function TaskNotepad({
 
         {/* Heading: Clickable to open Right Drawer Modal */}
         <td className="py-3 px-3 min-w-[200px] align-middle">
-          <button
-            type="button"
-            onClick={() => setActiveDetailTaskId(task.id)}
-            className="text-left font-semibold hover:text-blue-400 transition-colors flex items-center gap-2 group/title cursor-pointer max-w-full"
-            title="Click to view full task details & comments in side modal"
-          >
-            <span
-              className={`text-sm font-semibold truncate transition-colors ${
-                task.stage === "completed"
-                  ? "line-through text-slate-500"
-                  : task.stage === "stopped"
-                  ? "text-slate-300 group-hover/title:text-rose-400"
-                  : "text-slate-100 group-hover/title:text-blue-400"
-              }`}
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setActiveDetailTaskId(task.id)}
+              className="text-left font-semibold hover:text-blue-400 transition-colors flex items-center gap-2 group/title cursor-pointer max-w-full"
+              title="Click to view full task details & comments in side modal"
             >
-              {taskHeading}
-            </span>
-            <span className="opacity-0 group-hover/title:opacity-100 transition-opacity text-blue-400 text-xs shrink-0 flex items-center gap-0.5">
-              <span>view</span>
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </span>
-          </button>
+              <span
+                className={`text-sm font-semibold truncate transition-colors ${
+                  task.stage === "completed"
+                    ? "line-through text-slate-500"
+                    : task.stage === "stopped"
+                    ? "text-slate-300 group-hover/title:text-rose-400"
+                    : "text-slate-100 group-hover/title:text-blue-400"
+                }`}
+              >
+                {taskHeading}
+              </span>
+              <span className="opacity-0 group-hover/title:opacity-100 transition-opacity text-blue-400 text-xs shrink-0 flex items-center gap-0.5">
+                <span>view</span>
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </span>
+            </button>
+            {task.folder && (
+              <span
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveFolder(task.folder!);
+                }}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-blue-950/70 border border-blue-500/30 text-blue-300 hover:bg-blue-900/80 cursor-pointer transition shrink-0"
+                title={`Folder: ${task.folder}. Click to filter`}
+              >
+                📁 {task.folder}
+              </span>
+            )}
+          </div>
         </td>
 
         {/* Comments Count Badge: Clickable to open Right Drawer Modal */}
@@ -1594,6 +1822,125 @@ export function TaskNotepad({
             </button>
           )}
         </div>
+      </div>
+
+      {/* TASK FOLDERS TAB BAR */}
+      <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-2.5 flex items-center justify-between gap-3 overflow-hidden">
+        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-thin py-0.5 min-w-0 flex-1">
+          {/* All Tasks Tab */}
+          <button
+            type="button"
+            onClick={() => setActiveFolder("all")}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 shrink-0 cursor-pointer ${
+              activeFolder === "all"
+                ? "bg-blue-600 text-white shadow-sm shadow-blue-600/30"
+                : "text-slate-400 hover:text-slate-200 hover:bg-slate-900 border border-transparent"
+            }`}
+          >
+            <span>📁</span>
+            <span>All Tasks</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+              activeFolder === "all" ? "bg-blue-700 text-white" : "bg-slate-800 text-slate-400"
+            }`}>
+              {tasks.length}
+            </span>
+          </button>
+
+          {/* Unassigned / General Tab (if there are unassigned tasks and at least one custom folder) */}
+          {folders.length > 0 && tasks.some((t) => !t.folder || t.folder.trim() === "") && (
+            <button
+              type="button"
+              onClick={() => setActiveFolder("general")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 shrink-0 cursor-pointer ${
+                activeFolder === "general"
+                  ? "bg-slate-700 text-white shadow-sm"
+                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-900 border border-transparent"
+              }`}
+            >
+              <span>📁</span>
+              <span>General</span>
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-400">
+                {tasks.filter((t) => !t.folder || t.folder.trim() === "").length}
+              </span>
+            </button>
+          )}
+
+          {/* Custom Folders */}
+          {folders.map((f) => {
+            const count = tasks.filter((t) => (t.folder || "").toLowerCase() === f.toLowerCase()).length;
+            const isActive = activeFolder === f;
+            return (
+              <div
+                key={f}
+                className={`group flex items-center rounded-lg transition shrink-0 ${
+                  isActive
+                    ? "bg-blue-600/20 border border-blue-500/50 text-blue-300"
+                    : "bg-slate-900/60 hover:bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                <button
+                  type="button"
+                  onClick={() => setActiveFolder(f)}
+                  className="px-3 py-1.5 text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <span>📁</span>
+                  <span>{f}</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                    isActive ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-400"
+                  }`}>
+                    {count}
+                  </span>
+                </button>
+
+                {canEdit && (
+                  <div className="flex items-center pr-1.5 opacity-60 group-hover:opacity-100 transition">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setFolderToRename(f);
+                        setRenameFolderInput(f);
+                      }}
+                      title={`Rename folder "${f}"`}
+                      className="p-1 hover:text-white rounded transition text-[11px] cursor-pointer"
+                    >
+                      ✎
+                    </button>
+                    {canDelete && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteFolder(f);
+                        }}
+                        title={`Delete folder "${f}"`}
+                        className="p-1 hover:text-rose-400 rounded transition text-[11px] cursor-pointer"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Add Folder Button */}
+        {canEdit && (
+          <button
+            type="button"
+            onClick={() => {
+              setNewFolderInput("");
+              setIsAddFolderModalOpen(true);
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 hover:text-white rounded-lg transition shrink-0 cursor-pointer"
+            title="Create a new task folder in this project"
+          >
+            <span>+</span>
+            <span>New Folder</span>
+          </button>
+        )}
       </div>
 
       {/* METRICS & PROGRESS BAR */}
@@ -1879,7 +2226,7 @@ export function TaskNotepad({
             /* GROUPED BY STAGE VIEW */
             <div className="space-y-6">
               {(["inprogress", "completed", "stopped"] as TaskStage[]).map((stg) => {
-                const stageTasks = tasks.filter((t) => t.stage === stg);
+                const stageTasks = filteredTasks.filter((t) => t.stage === stg);
                 const cfg = STAGE_CONFIG[stg];
 
                 return (
@@ -2073,6 +2420,94 @@ export function TaskNotepad({
                   placeholder="Describe the task details, requirements, or acceptance criteria..."
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition resize-y"
                 />
+              </div>
+
+              {/* FOLDER / CATEGORY SELECTOR */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-300">
+                    Folder <span className="text-slate-500 font-normal">(Optional)</span>
+                  </label>
+                  {!isCreatingInlineFolder && (
+                    <button
+                      type="button"
+                      onClick={() => setIsCreatingInlineFolder(true)}
+                      className="text-[11px] text-blue-400 hover:text-blue-300 font-medium cursor-pointer"
+                    >
+                      + New Folder
+                    </button>
+                  )}
+                </div>
+
+                {isCreatingInlineFolder ? (
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      autoFocus
+                      value={inlineFolderInput}
+                      onChange={(e) => setInlineFolderInput(e.target.value)}
+                      placeholder="Folder name (e.g. Backend, Frontend)..."
+                      className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-blue-500"
+                    />
+                    <button
+                      type="button"
+                      disabled={!inlineFolderInput.trim()}
+                      onClick={async () => {
+                        const name = inlineFolderInput.trim();
+                        if (name) {
+                          await handleAddFolder(name);
+                          setFormFolder(name);
+                          setIsCreatingInlineFolder(false);
+                          setInlineFolderInput("");
+                        }
+                      }}
+                      className="px-3 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition cursor-pointer"
+                    >
+                      Add
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsCreatingInlineFolder(false);
+                        setInlineFolderInput("");
+                      }}
+                      className="px-2.5 py-1.5 text-xs text-slate-400 hover:text-white bg-slate-800 rounded-xl cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <select
+                      value={formFolder}
+                      onChange={(e) => {
+                        if (e.target.value === "__create_new__") {
+                          setIsCreatingInlineFolder(true);
+                        } else {
+                          setFormFolder(e.target.value);
+                        }
+                      }}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-200 outline-none focus:border-blue-500 appearance-none transition cursor-pointer"
+                    >
+                      <option value="" className="bg-slate-900 text-slate-400">
+                        📁 General (No Folder)
+                      </option>
+                      {folders.map((f) => (
+                        <option key={f} value={f} className="bg-slate-900 text-slate-100">
+                          📁 {f}
+                        </option>
+                      ))}
+                      <option value="__create_new__" className="bg-slate-900 text-blue-400 font-semibold">
+                        + Create New Folder...
+                      </option>
+                    </select>
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-400">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* 3. STATUS (IN PROGRESS, COMPLETED, STOPPED) */}
@@ -2415,6 +2850,129 @@ export function TaskNotepad({
           </div>
         </div>
       )}
+
+      {/* CREATE NEW FOLDER MODAL */}
+      {isAddFolderModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
+          <div
+            className="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-150 p-5 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <span>📁</span>
+                <span>Create New Folder</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsAddFolderModalOpen(false)}
+                className="text-slate-400 hover:text-white text-sm"
+              >
+                ✕
+              </button>
+            </div>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const name = newFolderInput.trim();
+                if (name) {
+                  await handleAddFolder(name);
+                  setIsAddFolderModalOpen(false);
+                  setNewFolderInput("");
+                }
+              }}
+              className="space-y-3"
+            >
+              <input
+                type="text"
+                autoFocus
+                required
+                value={newFolderInput}
+                onChange={(e) => setNewFolderInput(e.target.value)}
+                placeholder="Folder name (e.g. Backend, Frontend)..."
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-blue-500"
+              />
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setIsAddFolderModalOpen(false)}
+                  className="px-3.5 py-1.5 text-xs text-slate-400 hover:text-white bg-slate-800 rounded-lg cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!newFolderInput.trim()}
+                  className="px-4 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-lg shadow-sm transition cursor-pointer"
+                >
+                  Create Folder
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* RENAME FOLDER MODAL */}
+      {folderToRename && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
+          <div
+            className="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-150 p-5 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <span>✎</span>
+                <span>Rename Folder</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setFolderToRename(null)}
+                className="text-slate-400 hover:text-white text-sm"
+              >
+                ✕
+              </button>
+            </div>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const clean = renameFolderInput.trim();
+                if (clean && folderToRename) {
+                  await handleRenameFolder(folderToRename, clean);
+                  setFolderToRename(null);
+                }
+              }}
+              className="space-y-3"
+            >
+              <input
+                type="text"
+                autoFocus
+                required
+                value={renameFolderInput}
+                onChange={(e) => setRenameFolderInput(e.target.value)}
+                placeholder="New folder name..."
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-blue-500"
+              />
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setFolderToRename(null)}
+                  className="px-3.5 py-1.5 text-xs text-slate-400 hover:text-white bg-slate-800 rounded-lg cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!renameFolderInput.trim()}
+                  className="px-4 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-lg shadow-sm transition cursor-pointer"
+                >
+                  Save
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
       {/* ========================================================================= */}
       {/* RIGHT SIDE SLIDE-OVER DRAWER MODAL (Task Details & Comments)              */}
       {/* ========================================================================= */}
@@ -2544,6 +3102,55 @@ export function TaskNotepad({
                     <h2 className="text-xl font-bold text-white leading-snug">
                       {activeDetailTask.heading || activeDetailTask.title}
                     </h2>
+                  </div>
+
+                  {/* Task Folder / Category */}
+                  <div className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-950/60 border border-slate-800">
+                    <span className="text-xs font-semibold text-slate-400 flex items-center gap-1.5">
+                      <span>📁</span>
+                      <span>Folder:</span>
+                    </span>
+                    <div className="relative flex-1">
+                      <select
+                        value={activeDetailTask.folder || ""}
+                        disabled={isReadOnly}
+                        onChange={(e) => {
+                          if (e.target.value === "__create_new__") {
+                            const name = prompt("Enter new folder name:");
+                            if (name && name.trim()) {
+                              handleAddFolder(name.trim());
+                              handleChangeTaskFolder(activeDetailTask.id, name.trim());
+                            }
+                          } else {
+                            handleChangeTaskFolder(activeDetailTask.id, e.target.value);
+                          }
+                        }}
+                        className={`w-full text-xs font-semibold px-3 py-1.5 rounded-lg border appearance-none pr-7 outline-none transition-colors ${
+                          activeDetailTask.folder
+                            ? "bg-blue-950/70 text-blue-300 border-blue-500/40"
+                            : "bg-slate-900 text-slate-400 border-slate-800"
+                        } ${isReadOnly ? "cursor-not-allowed opacity-80" : "cursor-pointer"}`}
+                      >
+                        <option value="" className="bg-slate-900 text-slate-400">
+                          📁 General (No Folder)
+                        </option>
+                        {folders.map((f) => (
+                          <option key={f} value={f} className="bg-slate-900 text-slate-100">
+                            📁 {f}
+                          </option>
+                        ))}
+                        {!isReadOnly && (
+                          <option value="__create_new__" className="bg-slate-900 text-blue-400 font-semibold">
+                            + Create New Folder...
+                          </option>
+                        )}
+                      </select>
+                      <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-400">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Timeline & Metadata */}

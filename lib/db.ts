@@ -368,6 +368,7 @@ export async function ensureTableExists(): Promise<void> {
       user_id UUID
     );
     ALTER TABLE projects ADD COLUMN IF NOT EXISTS user_id UUID;
+    ALTER TABLE projects ADD COLUMN IF NOT EXISTS task_folders JSONB DEFAULT '[]'::jsonb;
   `);
   projectsInitialized = true;
 }
@@ -458,6 +459,7 @@ export async function getAllProjects(userId: string): Promise<Project[]> {
     created_at: string | number;
     sections: unknown;
     tasks: string | null;
+    task_folders: unknown;
     user_id: string | null;
     permission_level: ProjectPermissionLevel | null;
     allowed_views: unknown;
@@ -468,6 +470,7 @@ export async function getAllProjects(userId: string): Promise<Project[]> {
        p.created_at, 
        p.sections, 
        p.tasks, 
+       p.task_folders,
        p.user_id,
        pm.permission_level,
        pm.allowed_views
@@ -487,6 +490,17 @@ export async function getAllProjects(userId: string): Promise<Project[]> {
         parsedSections = JSON.parse(row.sections);
       } catch {
         parsedSections = [];
+      }
+    }
+
+    let parsedFolders: string[] = [];
+    if (Array.isArray(row.task_folders)) {
+      parsedFolders = row.task_folders as string[];
+    } else if (typeof row.task_folders === "string") {
+      try {
+        parsedFolders = JSON.parse(row.task_folders);
+      } catch {
+        parsedFolders = [];
       }
     }
 
@@ -514,6 +528,7 @@ export async function getAllProjects(userId: string): Promise<Project[]> {
       createdAt: Number(row.created_at) || Date.now(),
       sections: parsedSections,
       tasks: row.tasks ?? "",
+      taskFolders: parsedFolders,
       userId: row.user_id || userId,
       currentUserPermission,
       isOwner,
@@ -527,13 +542,14 @@ export async function saveProject(project: Project, userId: string): Promise<voi
   const pool = getPool();
   await pool.query(
     `
-    INSERT INTO projects (id, name, created_at, sections, tasks, user_id)
-    VALUES ($1, $2, $3, $4::jsonb, $5, $6)
+    INSERT INTO projects (id, name, created_at, sections, tasks, user_id, task_folders)
+    VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7::jsonb)
     ON CONFLICT (id) DO UPDATE SET
       name = EXCLUDED.name,
       sections = EXCLUDED.sections,
       tasks = EXCLUDED.tasks,
-      user_id = COALESCE(projects.user_id, EXCLUDED.user_id)
+      user_id = COALESCE(projects.user_id, EXCLUDED.user_id),
+      task_folders = COALESCE(EXCLUDED.task_folders, projects.task_folders, '[]'::jsonb)
   `,
     [
       project.id,
@@ -542,6 +558,7 @@ export async function saveProject(project: Project, userId: string): Promise<voi
       JSON.stringify(project.sections || []),
       project.tasks || "",
       userId,
+      JSON.stringify(project.taskFolders || []),
     ]
   );
 }
@@ -579,9 +596,11 @@ export async function ensureTasksTableExists(): Promise<void> {
       ALTER TABLE tasks ADD COLUMN IF NOT EXISTS comments TEXT DEFAULT '';
       ALTER TABLE tasks ADD COLUMN IF NOT EXISTS start_date TEXT DEFAULT '';
       ALTER TABLE tasks ADD COLUMN IF NOT EXISTS end_date TEXT DEFAULT '';
+      ALTER TABLE tasks ADD COLUMN IF NOT EXISTS folder TEXT DEFAULT '';
       CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks (project_id);
       CREATE INDEX IF NOT EXISTS idx_tasks_user_id ON tasks (user_id);
       CREATE INDEX IF NOT EXISTS idx_tasks_stage ON tasks (stage);
+      CREATE INDEX IF NOT EXISTS idx_tasks_folder ON tasks (folder);
       CREATE OR REPLACE VIEW task AS SELECT * FROM tasks;
     `);
     tasksInitialized = true;
@@ -619,8 +638,9 @@ export async function getTasksByProject(
     start_date: string | null;
     end_date: string | null;
     created_at: string | number;
+    folder: string | null;
   }>(
-    "SELECT id, project_id, user_id, title, COALESCE(NULLIF(heading, ''), title) as heading, description, comments, stage, start_date, end_date, created_at FROM tasks WHERE project_id = $1 ORDER BY created_at ASC",
+    "SELECT id, project_id, user_id, title, COALESCE(NULLIF(heading, ''), title) as heading, description, comments, stage, start_date, end_date, created_at, COALESCE(folder, '') as folder FROM tasks WHERE project_id = $1 ORDER BY created_at ASC",
     [projectId]
   );
 
@@ -637,6 +657,7 @@ export async function getTasksByProject(
       startDate: r.start_date || "",
       endDate: r.end_date || "",
       createdAt: Number(r.created_at) || Date.now(),
+      folder: r.folder || "",
     }));
   }
 
@@ -705,6 +726,7 @@ export async function getTasksByProject(
           startDate: "",
           endDate: "",
           createdAt: Date.now() - (lines.length - i) * 60000,
+          folder: "",
         });
       }
     }
@@ -728,11 +750,12 @@ export async function saveTask(
   const commentsText = task.comments || "";
   const startDateText = task.startDate || "";
   const endDateText = task.endDate || "";
+  const folderText = task.folder || "";
 
   await pool.query(
     `
-    INSERT INTO tasks (id, project_id, user_id, title, heading, description, comments, stage, start_date, end_date, created_at)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    INSERT INTO tasks (id, project_id, user_id, title, heading, description, comments, stage, start_date, end_date, created_at, folder)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
     ON CONFLICT (id) DO UPDATE SET
       title = EXCLUDED.title,
       heading = EXCLUDED.heading,
@@ -741,6 +764,7 @@ export async function saveTask(
       stage = EXCLUDED.stage,
       start_date = EXCLUDED.start_date,
       end_date = EXCLUDED.end_date,
+      folder = EXCLUDED.folder,
       project_id = EXCLUDED.project_id,
       user_id = COALESCE(tasks.user_id, EXCLUDED.user_id)
   `,
@@ -756,6 +780,7 @@ export async function saveTask(
       startDateText,
       endDateText,
       createdAt,
+      folderText,
     ]
   );
 }
