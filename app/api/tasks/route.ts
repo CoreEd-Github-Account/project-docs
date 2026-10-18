@@ -87,11 +87,7 @@ export async function POST(request: Request) {
     }
 
     const stageValue = stage || status;
-    const validStage: TaskStage = ["inprogress", "completed", "stopped"].includes(
-      stageValue
-    )
-      ? stageValue
-      : "inprogress";
+    const validStage: TaskStage = stageValue ? String(stageValue).trim().toLowerCase() : "inprogress";
 
     const newTask: TaskItem = {
       id:
@@ -112,6 +108,7 @@ export async function POST(request: Request) {
       createdAt: Number(body.createdAt) || Date.now(),
       folder: folder !== undefined ? String(folder).trim() : "",
       attachments: Array.isArray(body.attachments) ? body.attachments : [],
+      voiceNote: body.voiceNote || undefined,
     };
 
     await saveTask(newTask, projectId, auth.user.id);
@@ -190,19 +187,21 @@ export async function PUT(request: Request) {
       description: string;
       comments: string;
       attachments: string | null;
+      voice_note: string | null;
       start_date: string;
       end_date: string;
       created_at: string | number;
       stage: TaskStage;
       folder: string | null;
     }>(
-      "SELECT heading, title, description, comments, COALESCE(attachments, '[]') as attachments, start_date, end_date, created_at, stage, folder FROM tasks WHERE id = $1 LIMIT 1",
+      "SELECT heading, title, description, comments, COALESCE(attachments, '[]') as attachments, COALESCE(voice_note, '') as voice_note, start_date, end_date, created_at, stage, folder FROM tasks WHERE id = $1 LIMIT 1",
       [id]
     );
 
     let previousStage: TaskStage | undefined = undefined;
     let previousComments: string | undefined = undefined;
     let taskAttachments = Array.isArray(body.attachments) ? body.attachments : undefined;
+    let taskVoiceNote = body.voiceNote !== undefined ? body.voiceNote : undefined;
 
     if (existingRows.length > 0) {
       previousStage = existingRows[0].stage;
@@ -219,6 +218,13 @@ export async function PUT(request: Request) {
           taskAttachments = JSON.parse(existingRows[0].attachments || "[]");
         } catch {
           taskAttachments = [];
+        }
+      }
+      if (taskVoiceNote === undefined && existingRows[0].voice_note) {
+        try {
+          taskVoiceNote = JSON.parse(existingRows[0].voice_note);
+        } catch {
+          taskVoiceNote = undefined;
         }
       }
     }
@@ -242,11 +248,7 @@ export async function PUT(request: Request) {
     }
 
     const stageValue = stage || status;
-    const validStage: TaskStage = ["inprogress", "completed", "stopped"].includes(
-      stageValue
-    )
-      ? stageValue
-      : "inprogress";
+    const validStage: TaskStage = stageValue ? String(stageValue).trim().toLowerCase() : "inprogress";
 
     const updatedTask: TaskItem = {
       id,
@@ -257,6 +259,7 @@ export async function PUT(request: Request) {
       description: taskDescription || "",
       comments: taskComments || "",
       attachments: Array.isArray(taskAttachments) ? taskAttachments : [],
+      voiceNote: taskVoiceNote || undefined,
       stage: validStage,
       startDate: String(taskStartDate || "").trim(),
       endDate: String(taskEndDate || "").trim(),

@@ -12,6 +12,7 @@ import type {
   TaskStage,
   TaskMessage,
   TaskAttachment,
+  TaskVoiceNote,
   SavedPrompt,
   ProjectInvitation,
   ProjectMember,
@@ -19,6 +20,7 @@ import type {
   ProjectRole,
   ProjectViewTab,
   TaskNotification,
+  ProjectStatusStage,
 } from "./types";
 
 let poolInstance: Pool | null = null;
@@ -370,6 +372,7 @@ export async function ensureTableExists(): Promise<void> {
     );
     ALTER TABLE projects ADD COLUMN IF NOT EXISTS user_id UUID;
     ALTER TABLE projects ADD COLUMN IF NOT EXISTS task_folders JSONB DEFAULT '[]'::jsonb;
+    ALTER TABLE projects ADD COLUMN IF NOT EXISTS status_stages JSONB DEFAULT '[]'::jsonb;
   `);
   projectsInitialized = true;
 }
@@ -461,6 +464,7 @@ export async function getAllProjects(userId: string): Promise<Project[]> {
     sections: unknown;
     tasks: string | null;
     task_folders: unknown;
+    status_stages: unknown;
     user_id: string | null;
     permission_level: ProjectPermissionLevel | null;
     allowed_views: unknown;
@@ -472,6 +476,7 @@ export async function getAllProjects(userId: string): Promise<Project[]> {
        p.sections, 
        p.tasks, 
        p.task_folders,
+       p.status_stages,
        p.user_id,
        pm.permission_level,
        pm.allowed_views
@@ -505,6 +510,17 @@ export async function getAllProjects(userId: string): Promise<Project[]> {
       }
     }
 
+    let parsedStages: ProjectStatusStage[] = [];
+    if (Array.isArray(row.status_stages)) {
+      parsedStages = row.status_stages as ProjectStatusStage[];
+    } else if (typeof row.status_stages === "string") {
+      try {
+        parsedStages = JSON.parse(row.status_stages);
+      } catch {
+        parsedStages = [];
+      }
+    }
+
     const isOwner = row.user_id === userId;
     const currentUserPermission: ProjectRole = isOwner
       ? "owner"
@@ -530,6 +546,7 @@ export async function getAllProjects(userId: string): Promise<Project[]> {
       sections: parsedSections,
       tasks: row.tasks ?? "",
       taskFolders: parsedFolders,
+      statusStages: parsedStages,
       userId: row.user_id || userId,
       currentUserPermission,
       isOwner,
@@ -543,14 +560,15 @@ export async function saveProject(project: Project, userId: string): Promise<voi
   const pool = getPool();
   await pool.query(
     `
-    INSERT INTO projects (id, name, created_at, sections, tasks, user_id, task_folders)
-    VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7::jsonb)
+    INSERT INTO projects (id, name, created_at, sections, tasks, user_id, task_folders, status_stages)
+    VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7::jsonb, $8::jsonb)
     ON CONFLICT (id) DO UPDATE SET
       name = EXCLUDED.name,
       sections = EXCLUDED.sections,
       tasks = EXCLUDED.tasks,
       user_id = COALESCE(projects.user_id, EXCLUDED.user_id),
-      task_folders = COALESCE(EXCLUDED.task_folders, projects.task_folders, '[]'::jsonb)
+      task_folders = COALESCE(EXCLUDED.task_folders, projects.task_folders, '[]'::jsonb),
+      status_stages = COALESCE(EXCLUDED.status_stages, projects.status_stages, '[]'::jsonb)
   `,
     [
       project.id,
@@ -560,6 +578,7 @@ export async function saveProject(project: Project, userId: string): Promise<voi
       project.tasks || "",
       userId,
       JSON.stringify(project.taskFolders || []),
+      JSON.stringify(project.statusStages || []),
     ]
   );
 }
@@ -599,6 +618,8 @@ export async function ensureTasksTableExists(): Promise<void> {
       ALTER TABLE tasks ADD COLUMN IF NOT EXISTS end_date TEXT DEFAULT '';
       ALTER TABLE tasks ADD COLUMN IF NOT EXISTS folder TEXT DEFAULT '';
       ALTER TABLE tasks ADD COLUMN IF NOT EXISTS attachments TEXT DEFAULT '[]';
+      ALTER TABLE tasks ADD COLUMN IF NOT EXISTS voice_note TEXT DEFAULT '';
+      ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_stage_check;
       CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks (project_id);
       CREATE INDEX IF NOT EXISTS idx_tasks_user_id ON tasks (user_id);
       CREATE INDEX IF NOT EXISTS idx_tasks_stage ON tasks (stage);
@@ -619,6 +640,16 @@ function safeParseAttachments(raw?: string | null): TaskAttachment[] {
     return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
+  }
+}
+
+function safeParseVoiceNote(raw?: string | null): TaskVoiceNote | null {
+  if (!raw || !raw.trim()) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" && parsed.url ? parsed : null;
+  } catch {
+    return null;
   }
 }
 
@@ -647,13 +678,14 @@ export async function getTasksByProject(
     description: string | null;
     comments: string | null;
     attachments: string | null;
+    voice_note: string | null;
     stage: TaskStage;
     start_date: string | null;
     end_date: string | null;
     created_at: string | number;
     folder: string | null;
   }>(
-    "SELECT id, project_id, user_id, title, COALESCE(NULLIF(heading, ''), title) as heading, description, comments, COALESCE(attachments, '[]') as attachments, stage, start_date, end_date, created_at, COALESCE(folder, '') as folder FROM tasks WHERE project_id = $1 ORDER BY created_at ASC",
+    "SELECT id, project_id, user_id, title, COALESCE(NULLIF(heading, ''), title) as heading, description, comments, COALESCE(attachments, '[]') as attachments, COALESCE(voice_note, '') as voice_note, stage, start_date, end_date, created_at, COALESCE(folder, '') as folder FROM tasks WHERE project_id = $1 ORDER BY created_at ASC",
     [projectId]
   );
 
@@ -667,6 +699,7 @@ export async function getTasksByProject(
       description: r.description || "",
       comments: r.comments || "",
       attachments: safeParseAttachments(r.attachments),
+      voiceNote: safeParseVoiceNote(r.voice_note),
       stage: r.stage,
       startDate: r.start_date || "",
       endDate: r.end_date || "",
@@ -766,11 +799,12 @@ export async function saveTask(
   const endDateText = task.endDate || "";
   const folderText = task.folder || "";
   const attachmentsJson = JSON.stringify(task.attachments || []);
+  const voiceNoteJson = task.voiceNote ? JSON.stringify(task.voiceNote) : "";
 
   await pool.query(
     `
-    INSERT INTO tasks (id, project_id, user_id, title, heading, description, comments, stage, start_date, end_date, created_at, folder, attachments)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+    INSERT INTO tasks (id, project_id, user_id, title, heading, description, comments, stage, start_date, end_date, created_at, folder, attachments, voice_note)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
     ON CONFLICT (id) DO UPDATE SET
       title = EXCLUDED.title,
       heading = EXCLUDED.heading,
@@ -781,6 +815,7 @@ export async function saveTask(
       end_date = EXCLUDED.end_date,
       folder = EXCLUDED.folder,
       attachments = EXCLUDED.attachments,
+      voice_note = EXCLUDED.voice_note,
       project_id = EXCLUDED.project_id,
       user_id = COALESCE(tasks.user_id, EXCLUDED.user_id)
   `,
@@ -798,6 +833,7 @@ export async function saveTask(
       createdAt,
       folderText,
       attachmentsJson,
+      voiceNoteJson,
     ]
   );
 }

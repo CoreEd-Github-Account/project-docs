@@ -48,10 +48,17 @@ export async function POST(request: Request) {
       );
     }
 
-    // Validate mime type
-    if (!file.type.startsWith("image/")) {
+    // Validate mime type (allow images and audio recordings)
+    const isImage = file.type.startsWith("image/");
+    const isAudio =
+      file.type.startsWith("audio/") ||
+      file.type.includes("wave") ||
+      file.type.includes("wav") ||
+      /\.(mp3|wav|m4a|aac|ogg|webm|flac)$/i.test(file.name);
+
+    if (!isImage && !isAudio) {
       return NextResponse.json(
-        { error: "Only image files (JPEG, PNG, WebP, GIF, SVG) are allowed." },
+        { error: "Only image files (JPEG, PNG, WebP, GIF) and audio/voice recordings (WAV, MP3, M4A, OGG) are allowed." },
         { status: 400 }
       );
     }
@@ -74,21 +81,22 @@ export async function POST(request: Request) {
 
     const uploadResponse = await imagekit.upload({
       file: base64File,
-      fileName: sanitizedFileName || `task-image-${Date.now()}`,
-      folder: `/projects/${projectId}/tasks`,
+      fileName: sanitizedFileName || (isAudio ? `voice-note-${Date.now()}.wav` : `task-image-${Date.now()}`),
+      folder: isAudio ? `/projects/${projectId}/tasks/voice` : `/projects/${projectId}/tasks`,
       useUniqueFileName: true,
-      tags: ["task-attachment", projectId, taskId || "general"],
+      tags: [isAudio ? "task-voice-note" : "task-attachment", projectId, taskId || "general"],
     });
 
     const attachment: TaskAttachment = {
       fileId: uploadResponse.fileId,
       name: file.name,
       url: uploadResponse.url,
-      thumbnailUrl:
-        uploadResponse.thumbnailUrl ||
-        `${uploadResponse.url}?tr=w-400,h-400,c-at_max,q-80`,
+      thumbnailUrl: isAudio
+        ? undefined
+        : (uploadResponse.thumbnailUrl || `${uploadResponse.url}?tr=w-400,h-400,c-at_max,q-80`),
       size: uploadResponse.size,
       filePath: uploadResponse.filePath,
+      fileType: isAudio ? "audio" : "image",
       createdAt: Date.now(),
     };
 

@@ -4,7 +4,30 @@ export interface Section {
   content: string;
 }
 
-export type TaskStage = "completed" | "inprogress" | "stopped";
+export type StageColor =
+  | "amber"
+  | "emerald"
+  | "rose"
+  | "blue"
+  | "purple"
+  | "cyan"
+  | "indigo"
+  | "teal"
+  | "orange"
+  | "slate"
+  | "pink";
+
+export interface ProjectStatusStage {
+  id: string;
+  name?: string;
+  label?: string;
+  slug?: string;
+  color: StageColor;
+  description?: string;
+  isDefault?: boolean;
+}
+
+export type TaskStage = "completed" | "inprogress" | "stopped" | string;
 
 export interface TaskSubComment {
   id: string;
@@ -30,6 +53,16 @@ export interface TaskAttachment {
   thumbnailUrl?: string;
   size?: number;
   filePath?: string;
+  fileType?: "image" | "audio" | "file";
+  createdAt: number;
+}
+
+export interface TaskVoiceNote {
+  fileId: string;
+  name: string;
+  url: string;
+  size?: number;
+  duration?: number;
   createdAt: number;
 }
 
@@ -41,6 +74,7 @@ export interface TaskItem {
   stage: TaskStage;
   comments?: string;
   attachments?: TaskAttachment[];
+  voiceNote?: TaskVoiceNote | null;
   startDate?: string;
   endDate?: string;
   createdAt?: number;
@@ -77,6 +111,7 @@ export interface Project {
   isOwner?: boolean;
   allowedViews?: ProjectViewTab[];
   taskFolders?: string[];
+  statusStages?: ProjectStatusStage[];
 }
 
 export interface ProjectInvitation {

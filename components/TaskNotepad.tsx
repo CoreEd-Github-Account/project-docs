@@ -1,12 +1,15 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import type { Project, TaskItem, TaskStage, TaskComment, TaskSubComment, ProjectRole, TaskMessage, TaskAttachment } from "@/lib/types";
+import type { Project, TaskItem, TaskStage, TaskComment, TaskSubComment, ProjectRole, TaskMessage, TaskAttachment, TaskVoiceNote, ProjectStatusStage, StageColor } from "@/lib/types";
+import { VoiceRecorder, getAudioInputDevices, type AudioInputDevice } from "@/lib/audio-recorder";
+import { DEFAULT_STATUS_STAGES, resolveStageConfig, getStageStyles } from "@/lib/stage-presets";
 
 interface TaskNotepadProps {
   project: Project;
   onUpdateTasks: (tasks: string) => void;
   onUpdateProjectFolders?: (folders: string[]) => void;
+  onUpdateProjectStages?: (stages: ProjectStatusStage[]) => void;
   onManualSave?: () => void;
   saveStatus: "saved" | "unsaved" | "saving" | "error";
   userPermission?: ProjectRole;
@@ -98,6 +101,14 @@ export function formatFileSize(bytes?: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+// Helper: format audio duration in M:SS
+export function formatAudioDuration(seconds?: number): string {
+  if (!seconds || isNaN(seconds) || seconds <= 0) return "0:00";
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
 }
 
 // Helper: parse comments from JSON array or legacy string with date/time preservation
@@ -229,6 +240,8 @@ function parseTasksFromText(rawText: string, projectId?: string): TaskItem[] {
               endDate: String(item.endDate || item.end_date || "").trim(),
               createdAt: Number(item.createdAt) || Date.now(),
               folder: String(item.folder || "").trim(),
+              attachments: Array.isArray(item.attachments) ? item.attachments : [],
+              voiceNote: item.voiceNote || null,
             };
           });
       }
@@ -439,10 +452,23 @@ export function TaskNotepad({
   project,
   onUpdateTasks,
   onUpdateProjectFolders,
+  onUpdateProjectStages,
   onManualSave,
   saveStatus,
   userPermission,
 }: TaskNotepadProps) {
+  // Dynamic Project Status Stages with fallback
+  const projectStages: ProjectStatusStage[] = React.useMemo(() => {
+    return project.statusStages && project.statusStages.length > 0
+      ? project.statusStages
+      : DEFAULT_STATUS_STAGES;
+  }, [project.statusStages]);
+
+  const getStageConfig = React.useCallback(
+    (stageSlug: string) => resolveStageConfig(stageSlug, projectStages),
+    [projectStages]
+  );
+
   // Permission derivation: owner, full, edit_no_delete, or read
   const role: ProjectRole =
     userPermission || project.currentUserPermission || (project.isOwner === false ? "read" : "owner");
@@ -479,7 +505,7 @@ export function TaskNotepad({
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [formHeading, setFormHeading] = useState("");
   const [formDescription, setFormDescription] = useState("");
-  const [formStatus, setFormStatus] = useState<TaskStage>("inprogress");
+  const [formStatus, setFormStatus] = useState<TaskStage>(() => project.statusStages?.[0]?.slug || "inprogress");
   const [formFolder, setFormFolder] = useState<string>("");
   const [isCreatingInlineFolder, setIsCreatingInlineFolder] = useState(false);
   const [inlineFolderInput, setInlineFolderInput] = useState("");
@@ -495,7 +521,57 @@ export function TaskNotepad({
   const [isUploadingFormAttachment, setIsUploadingFormAttachment] = useState(false);
   const [formAttachmentError, setFormAttachmentError] = useState<string | null>(null);
   const [isFormDraggingOver, setIsFormDraggingOver] = useState(false);
+  const [showImageUploader, setShowImageUploader] = useState(false);
   const formAttachmentFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Voice Explanation / Audio Note state (for Add / Edit Task Modal)
+  const [formVoiceNote, setFormVoiceNote] = useState<TaskVoiceNote | null>(null);
+  const [isRecordingVoice, setIsRecordingVoice] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [micAudioLevel, setMicAudioLevel] = useState(0);
+  const [isUploadingVoice, setIsUploadingVoice] = useState(false);
+  const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [audioDevices, setAudioDevices] = useState<AudioInputDevice[]>([]);
+  const [selectedAudioDeviceId, setSelectedAudioDeviceId] = useState<string>("");
+  const [activeMicLabel, setActiveMicLabel] = useState<string>("");
+  const voiceRecorderRef = useRef<VoiceRecorder | null>(null);
+  const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const voiceFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Auto-discover available microphones when voice recorder is opened
+  useEffect(() => {
+    if (showVoiceRecorder) {
+      getAudioInputDevices().then((devs) => {
+        if (devs.length > 0) {
+          setAudioDevices(devs);
+          // Prefer physical hardware mic (Realtek / Array) over virtual idle drivers (DroidCam)
+          const preferred = devs.find(
+            (d) =>
+              /realtek|array|built-in|internal/i.test(d.label) &&
+              !/droidcam|virtual/i.test(d.label)
+          );
+          if (preferred && !selectedAudioDeviceId) {
+            setSelectedAudioDeviceId(preferred.deviceId);
+          } else if (!selectedAudioDeviceId && devs[0]) {
+            setSelectedAudioDeviceId(devs[0].deviceId);
+          }
+        }
+      });
+    }
+  }, [showVoiceRecorder, selectedAudioDeviceId]);
+
+  // Audio cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+      }
+      if (voiceRecorderRef.current) {
+        voiceRecorderRef.current.cancel();
+      }
+    };
+  }, []);
 
   // Quick Inline Comment draft state for task cards: map of taskId -> draft comment text
   const [inlineComments, setInlineComments] = useState<Record<string, string>>({});
@@ -1128,6 +1204,192 @@ export function TaskNotepad({
     }
   };
 
+  // Start live voice recording via microphone (16-bit PCM WAV + Direct PCM & Time-Domain Level Visualizer)
+  const startVoiceRecording = async (overrideDeviceId?: string) => {
+    if (isReadOnly) return;
+    try {
+      setVoiceError(null);
+      setMicAudioLevel(0);
+
+      const devId = overrideDeviceId || selectedAudioDeviceId || undefined;
+      const recorder = new VoiceRecorder();
+      voiceRecorderRef.current = recorder;
+
+      const activeLabel = await recorder.start({
+        deviceId: devId,
+        onLevelChange: (level) => {
+          setMicAudioLevel(level);
+        },
+      });
+
+      setActiveMicLabel(activeLabel);
+      setIsRecordingVoice(true);
+      setRecordingSeconds(0);
+
+      // Re-query audio devices now that microphone access is granted
+      getAudioInputDevices().then((devs) => {
+        if (devs.length > 0) {
+          setAudioDevices(devs);
+        }
+      });
+
+      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingSeconds((prev) => prev + 1);
+      }, 1000);
+    } catch (err: any) {
+      console.error("Microphone access error:", err);
+      setVoiceError(err?.message || "Microphone access denied or audio device not found. Please check browser microphone permissions.");
+      setIsRecordingVoice(false);
+      setMicAudioLevel(0);
+    }
+  };
+
+  // Stop recording, encode to standard 16-bit PCM WAV, and upload to ImageKit
+  const stopVoiceRecording = async () => {
+    const recorder = voiceRecorderRef.current;
+    if (!recorder) return;
+
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+
+    const durationInSeconds = recordingSeconds;
+    setIsRecordingVoice(false);
+    setIsUploadingVoice(true);
+    setVoiceError(null);
+
+    try {
+      const result = await recorder.stop();
+      voiceRecorderRef.current = null;
+      setMicAudioLevel(0);
+
+      // Warn if user's microphone was completely silent / hardware muted
+      if (result.maxAmplitude < 0.008) {
+        setVoiceError("Audio level was very low. Please ensure your microphone is unmuted and speak directly into the mic.");
+      }
+
+      const formData = new FormData();
+      formData.append("file", result.file);
+      formData.append("projectId", project.id);
+      if (editingTaskId) {
+        formData.append("taskId", editingTaskId);
+      }
+
+      const res = await fetch("/api/tasks/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to upload voice note to ImageKit");
+      }
+
+      const voiceNoteData: TaskVoiceNote = {
+        fileId: data.attachment.fileId,
+        name: data.attachment.name,
+        url: data.attachment.url,
+        size: data.attachment.size,
+        duration: result.duration || durationInSeconds,
+        createdAt: data.attachment.createdAt || Date.now(),
+      };
+
+      setFormVoiceNote(voiceNoteData);
+      setShowVoiceRecorder(false);
+    } catch (err: any) {
+      console.error("Failed to upload recorded voice note:", err);
+      setVoiceError(err?.message || "Failed to upload audio recording.");
+    } finally {
+      setIsUploadingVoice(false);
+      setMicAudioLevel(0);
+    }
+  };
+
+  // Cancel live voice recording without saving
+  const cancelVoiceRecording = () => {
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+    if (voiceRecorderRef.current) {
+      voiceRecorderRef.current.cancel();
+      voiceRecorderRef.current = null;
+    }
+    setIsRecordingVoice(false);
+    setRecordingSeconds(0);
+    setMicAudioLevel(0);
+  };
+
+  // Upload an existing audio file (.mp3, .m4a, .wav, .webm, etc.)
+  const handleUploadVoiceFile = async (file: File) => {
+    if (isReadOnly || !file) return;
+
+    if (!file.type.startsWith("audio/") && !/\.(mp3|wav|m4a|aac|ogg|webm|flac)$/i.test(file.name)) {
+      setVoiceError("Please upload a valid audio file (.mp3, .m4a, .wav, .webm, .ogg).");
+      return;
+    }
+
+    if (file.size > 25 * 1024 * 1024) {
+      setVoiceError("Audio file exceeds 25MB limit.");
+      return;
+    }
+
+    setIsUploadingVoice(true);
+    setVoiceError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("projectId", project.id);
+      if (editingTaskId) {
+        formData.append("taskId", editingTaskId);
+      }
+
+      const res = await fetch("/api/tasks/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to upload audio file");
+      }
+
+      setFormVoiceNote({
+        fileId: data.attachment.fileId,
+        name: data.attachment.name,
+        url: data.attachment.url,
+        size: data.attachment.size,
+        createdAt: data.attachment.createdAt || Date.now(),
+      });
+    } catch (err: any) {
+      console.error("Failed to upload audio file:", err);
+      setVoiceError(err?.message || "Failed to upload audio file.");
+    } finally {
+      setIsUploadingVoice(false);
+      if (voiceFileInputRef.current) {
+        voiceFileInputRef.current.value = "";
+      }
+    }
+  };
+
+  // Remove voice note from form
+  const handleRemoveFormVoiceNote = async () => {
+    if (!formVoiceNote) return;
+    const fileId = formVoiceNote.fileId;
+    setFormVoiceNote(null);
+    try {
+      await fetch(
+        `/api/tasks/upload?fileId=${encodeURIComponent(fileId)}&projectId=${encodeURIComponent(project.id)}`,
+        { method: "DELETE" }
+      );
+    } catch (err) {
+      console.warn("Background audio delete warning:", err);
+    }
+  };
+
   // Add a new folder to current project
   const handleAddFolder = async (folderName: string) => {
     const cleanName = folderName.trim();
@@ -1297,7 +1559,7 @@ export function TaskNotepad({
     setEditingTaskId(null);
     setFormHeading("");
     setFormDescription("");
-    setFormStatus(stagePreset || (filterStage !== "all" ? filterStage : "inprogress"));
+    setFormStatus(stagePreset || (filterStage !== "all" ? filterStage : (projectStages[0]?.slug || "inprogress")));
     setFormFolder(activeFolder !== "all" && activeFolder !== "general" ? activeFolder : "");
     setIsCreatingInlineFolder(false);
     setInlineFolderInput("");
@@ -1307,6 +1569,12 @@ export function TaskNotepad({
     setFormEndDate("");
     setFormAttachments([]);
     setFormAttachmentError(null);
+    setShowImageUploader(false);
+    setShowVoiceRecorder(false);
+    setFormVoiceNote(null);
+    setVoiceError(null);
+    setIsRecordingVoice(false);
+    setRecordingSeconds(0);
     setFormError(null);
     setIsFormOpen(true);
   };
@@ -1328,15 +1596,27 @@ export function TaskNotepad({
     setFormEndDate(task.endDate || "");
     setFormAttachments(task.attachments || []);
     setFormAttachmentError(null);
+    setShowImageUploader(false);
+    setShowVoiceRecorder(false);
+    setFormVoiceNote(task.voiceNote || null);
+    setVoiceError(null);
+    setIsRecordingVoice(false);
+    setRecordingSeconds(0);
     setFormError(null);
     setIsFormOpen(true);
   };
 
   // Close Form Modal
   const closeForm = () => {
-    if (formSubmitting) return;
+    if (formSubmitting || isUploadingVoice) return;
+    if (isRecordingVoice) {
+      cancelVoiceRecording();
+    }
+    setShowImageUploader(false);
+    setShowVoiceRecorder(false);
     setIsFormOpen(false);
     setFormError(null);
+    setVoiceError(null);
   };
 
   // Handle Form Submission: Adds to form, updates tasks table, and Live Syncs with DB
@@ -1382,6 +1662,7 @@ export function TaskNotepad({
           createdAt: Date.now(),
           folder: formFolder.trim(),
           attachments: formAttachments,
+          voiceNote: formVoiceNote,
         };
 
         // 1. Optimistic UI update
@@ -1407,6 +1688,7 @@ export function TaskNotepad({
             createdAt: newTask.createdAt,
             folder: newTask.folder,
             attachments: formAttachments,
+            voiceNote: formVoiceNote,
           }),
         });
 
@@ -1437,6 +1719,7 @@ export function TaskNotepad({
           createdAt: existingTask?.createdAt || Date.now(),
           folder: formFolder.trim(),
           attachments: formAttachments,
+          voiceNote: formVoiceNote,
         };
 
         // 1. Optimistic UI update
@@ -1463,6 +1746,7 @@ export function TaskNotepad({
             createdAt: updatedTask.createdAt,
             folder: updatedTask.folder,
             attachments: formAttachments,
+            voiceNote: formVoiceNote,
           }),
         });
 
@@ -1484,7 +1768,9 @@ export function TaskNotepad({
     if (isReadOnly) return;
     const task = tasks.find((t) => t.id === id);
     if (!task) return;
-    const nextStage: TaskStage = task.stage === "completed" ? "inprogress" : "completed";
+    const doneStage = projectStages.find((s) => s.slug === "completed" || s.slug === "done" || s.slug === "finished")?.slug || projectStages[projectStages.length - 1]?.slug || "completed";
+    const firstStage = projectStages[0]?.slug || "inprogress";
+    const nextStage: TaskStage = task.stage === doneStage ? firstStage : doneStage;
     const updated = tasks.map((t) => (t.id === id ? { ...t, stage: nextStage } : t));
     commitTasks(updated);
 
@@ -1616,12 +1902,29 @@ export function TaskNotepad({
   // Metrics
   const totalCount = tasks.length;
   const inProgressCount = tasks.filter((t) => t.stage === "inprogress").length;
-  const completedCount = tasks.filter((t) => t.stage === "completed").length;
-  const stoppedCount = tasks.filter((t) => t.stage === "stopped").length;
+  const completedCount = tasks.filter((t) => t.stage === "completed" || t.stage === "done").length;
+  const stoppedCount = tasks.filter((t) => t.stage === "stopped" || t.stage === "blocked").length;
 
   const completedPct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
   const inProgressPct = totalCount > 0 ? Math.round((inProgressCount / totalCount) * 100) : 0;
   const stoppedPct = totalCount > 0 ? Math.round((stoppedCount / totalCount) * 100) : 0;
+
+  // Dynamic metrics per project stage
+  const stageMetrics = React.useMemo(() => {
+    return projectStages.map((stg) => {
+      const slug = stg.slug || stg.id;
+      const count = tasks.filter((t) => t.stage === slug).length;
+      const pct = totalCount > 0 ? Math.round((count / totalCount) * 100) : 0;
+      const cfg = getStageConfig(slug);
+      return {
+        stage: stg,
+        slug,
+        count,
+        pct,
+        cfg,
+      };
+    });
+  }, [projectStages, tasks, totalCount, getStageConfig]);
 
   // Filtered tasks for list view
   const filteredTasks = tasks.filter((t) => {
@@ -1654,11 +1957,14 @@ export function TaskNotepad({
 
   // Render individual task as a clean tabular table row
   const renderTaskTableRow = (task: TaskItem) => {
-    const cfg = STAGE_CONFIG[task.stage];
+    const cfg = getStageConfig(task.stage);
     const taskHeading = task.heading || task.title;
     const taskComments = parseComments(task.comments);
     const hasComments = taskComments.length > 0;
     const hasTimeline = Boolean(task.startDate || task.endDate);
+
+    const doneStage = projectStages.find((s) => s.slug === "completed" || s.slug === "done" || s.slug === "finished")?.slug || projectStages[projectStages.length - 1]?.slug || "completed";
+    const isTaskDone = task.stage === doneStage || task.stage === "completed" || task.stage === "done";
 
     return (
       <tr
@@ -1677,22 +1983,22 @@ export function TaskNotepad({
             className={`w-5 h-5 rounded-md border flex items-center justify-center transition-all mx-auto ${
               isReadOnly ? "cursor-not-allowed opacity-60" : "cursor-pointer active:scale-95"
             } ${
-              task.stage === "completed"
+              isTaskDone
                 ? "bg-emerald-600 border-emerald-500 text-white shadow-sm"
                 : "border-slate-600 bg-slate-800/80 hover:border-blue-400 text-transparent"
             }`}
             title={
               isReadOnly
                 ? "Read only mode"
-                : task.stage === "completed"
+                : isTaskDone
                 ? "Mark as in progress"
                 : "Mark as completed"
             }
-            aria-label={task.stage === "completed" ? "Mark incomplete" : "Mark complete"}
+            aria-label={isTaskDone ? "Mark incomplete" : "Mark complete"}
           >
             <svg
               className={`w-3.5 h-3.5 transition-transform ${
-                task.stage === "completed" ? "scale-100" : "scale-0"
+                isTaskDone ? "scale-100" : "scale-0"
               }`}
               fill="none"
               stroke="currentColor"
@@ -1714,9 +2020,9 @@ export function TaskNotepad({
             >
               <span
                 className={`text-sm font-semibold truncate transition-colors ${
-                  task.stage === "completed"
+                  isTaskDone
                     ? "line-through text-slate-500"
-                    : task.stage === "stopped"
+                    : task.stage === "stopped" || task.stage === "blocked"
                     ? "text-slate-300 group-hover/title:text-rose-400"
                     : "text-slate-100 group-hover/title:text-blue-400"
                 }`}
@@ -1748,11 +2054,24 @@ export function TaskNotepad({
                   e.stopPropagation();
                   setActiveDetailTaskId(task.id);
                 }}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-purple-950/70 border border-purple-500/30 text-purple-300 hover:bg-purple-900/80 cursor-pointer transition shrink-0"
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-blue-950/70 border border-blue-500/30 text-blue-300 hover:bg-blue-900/80 cursor-pointer transition shrink-0"
                 title={`${task.attachments.length} image attachment(s). Click to view.`}
               >
                 <span>🖼️</span>
                 <span>{task.attachments.length}</span>
+              </span>
+            )}
+            {task.voiceNote && (
+              <span
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveDetailTaskId(task.id);
+                }}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-blue-950/80 border border-blue-500/40 text-blue-300 hover:bg-blue-900/90 cursor-pointer transition shrink-0 shadow-sm"
+                title="Voice explanation available. Click to listen."
+              >
+                <span>🎙️</span>
+                <span>Voice Note</span>
               </span>
             )}
           </div>
@@ -1807,15 +2126,15 @@ export function TaskNotepad({
                 isReadOnly ? "cursor-not-allowed opacity-80" : "cursor-pointer"
               }`}
             >
-              <option value="inprogress" className="bg-slate-900 text-amber-400">
-                ⏳ In Progress
-              </option>
-              <option value="completed" className="bg-slate-900 text-emerald-400">
-                ✓ Completed
-              </option>
-              <option value="stopped" className="bg-slate-900 text-rose-400">
-                ⏹ Stopped
-              </option>
+              {projectStages.map((stg) => {
+                const slug = stg.slug || stg.id;
+                const c = getStageConfig(slug);
+                return (
+                  <option key={slug} value={slug} className="bg-slate-900 text-slate-100">
+                    {c.label}
+                  </option>
+                );
+              })}
             </select>
             <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-1.5 text-current opacity-70">
               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2127,7 +2446,7 @@ export function TaskNotepad({
       </div>
 
       {/* METRICS & PROGRESS BAR */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
         {/* Total Tasks */}
         <div
           onClick={() => {
@@ -2148,95 +2467,52 @@ export function TaskNotepad({
           </div>
         </div>
 
-        {/* In Progress */}
-        <div
-          onClick={() => {
-            if (viewMode === "notepad") setViewMode("list");
-            setFilterStage((prev) => (prev === "inprogress" ? "all" : "inprogress"));
-          }}
-          className={`bg-slate-950/70 border rounded-xl p-3 flex flex-col justify-between transition cursor-pointer ${
-            filterStage === "inprogress" && viewMode === "list"
-              ? "border-amber-500/60 ring-1 ring-amber-500/30"
-              : "border-slate-800 hover:border-amber-500/30"
-          }`}
-          title={filterStage === "inprogress" ? "Clear filter (Show all)" : "Filter by In Progress"}
-        >
-          <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-amber-400"></span>
-            <span className="text-xs font-medium text-amber-400">In Progress</span>
-          </div>
-          <div className="flex items-baseline justify-between mt-1">
-            <span className="text-xl font-bold text-amber-400">{inProgressCount}</span>
-            <span className="text-[11px] text-amber-400/70">{inProgressPct}%</span>
-          </div>
-        </div>
-
-        {/* Completed */}
-        <div
-          onClick={() => {
-            if (viewMode === "notepad") setViewMode("list");
-            setFilterStage((prev) => (prev === "completed" ? "all" : "completed"));
-          }}
-          className={`bg-slate-950/70 border rounded-xl p-3 flex flex-col justify-between transition cursor-pointer ${
-            filterStage === "completed" && viewMode === "list"
-              ? "border-emerald-500/60 ring-1 ring-emerald-500/30"
-              : "border-slate-800 hover:border-emerald-500/30"
-          }`}
-          title={filterStage === "completed" ? "Clear filter (Show all)" : "Filter by Completed"}
-        >
-          <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-            <span className="text-xs font-medium text-emerald-400">Completed</span>
-          </div>
-          <div className="flex items-baseline justify-between mt-1">
-            <span className="text-xl font-bold text-emerald-400">{completedCount}</span>
-            <span className="text-[11px] text-emerald-400/70">{completedPct}%</span>
-          </div>
-        </div>
-
-        {/* Stopped */}
-        <div
-          onClick={() => {
-            if (viewMode === "notepad") setViewMode("list");
-            setFilterStage((prev) => (prev === "stopped" ? "all" : "stopped"));
-          }}
-          className={`bg-slate-950/70 border rounded-xl p-3 flex flex-col justify-between transition cursor-pointer ${
-            filterStage === "stopped" && viewMode === "list"
-              ? "border-rose-500/60 ring-1 ring-rose-500/30"
-              : "border-slate-800 hover:border-rose-500/30"
-          }`}
-          title={filterStage === "stopped" ? "Clear filter (Show all)" : "Filter by Stopped"}
-        >
-          <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-rose-400"></span>
-            <span className="text-xs font-medium text-rose-400">Stopped</span>
-          </div>
-          <div className="flex items-baseline justify-between mt-1">
-            <span className="text-xl font-bold text-rose-400">{stoppedCount}</span>
-            <span className="text-[11px] text-rose-400/70">{stoppedPct}%</span>
-          </div>
-        </div>
+        {/* Dynamic Project Stage Cards */}
+        {stageMetrics.map(({ stage, slug, count, pct, cfg }) => {
+          const isFilterActive = filterStage === slug && viewMode === "list";
+          return (
+            <div
+              key={slug}
+              onClick={() => {
+                if (viewMode === "notepad") setViewMode("list");
+                setFilterStage((prev) => (prev === slug ? "all" : slug));
+              }}
+              className={`bg-slate-950/70 border rounded-xl p-3 flex flex-col justify-between transition cursor-pointer ${
+                isFilterActive
+                  ? `${cfg.borderClass} ${cfg.ringClass} ring-1`
+                  : `border-slate-800 ${cfg.bgHoverClass}`
+              }`}
+              title={isFilterActive ? "Clear filter (Show all)" : `Filter by ${cfg.label}`}
+            >
+              <div className="flex items-center gap-1.5">
+                <span className={`w-2 h-2 rounded-full ${cfg.dotClass}`} />
+                <span className="text-xs font-medium truncate text-slate-300">{cfg.label}</span>
+              </div>
+              <div className="flex items-baseline justify-between mt-1">
+                <span className="text-xl font-bold text-white">{count}</span>
+                <span className="text-[11px] text-slate-400">{pct}%</span>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {/* MULTI-SEGMENT PROGRESS BAR */}
       {totalCount > 0 && (
         <div className="space-y-1.5">
           <div className="h-2 w-full bg-slate-950 rounded-full overflow-hidden flex border border-slate-800/80">
-            <div
-              style={{ width: `${completedPct}%` }}
-              className="bg-emerald-500 transition-all duration-300"
-              title={`Completed: ${completedPct}%`}
-            />
-            <div
-              style={{ width: `${inProgressPct}%` }}
-              className="bg-amber-500 transition-all duration-300"
-              title={`In Progress: ${inProgressPct}%`}
-            />
-            <div
-              style={{ width: `${stoppedPct}%` }}
-              className="bg-rose-500 transition-all duration-300"
-              title={`Stopped: ${stoppedPct}%`}
-            />
+            {stageMetrics.map(({ stage, slug, pct, cfg }) => {
+              if (pct <= 0) return null;
+              const bgClass = cfg.dotClass.split(" ")[0] || "bg-blue-500";
+              return (
+                <div
+                  key={slug}
+                  style={{ width: `${pct}%` }}
+                  className={`${bgClass} transition-all duration-300`}
+                  title={`${cfg.label}: ${pct}%`}
+                />
+              );
+            })}
           </div>
         </div>
       )}
@@ -2367,7 +2643,7 @@ export function TaskNotepad({
                         ? "No tasks match your search."
                         : filterStage === "all"
                         ? "No tasks added yet."
-                        : `No ${STAGE_CONFIG[filterStage].label.toLowerCase()} tasks.`}
+                        : `No ${getStageConfig(filterStage).label.toLowerCase()} tasks.`}
                     </p>
                     <p className="text-xs text-slate-500 mt-1">
                       Click the &quot;Add&quot; button to open the form and add your first task.
@@ -2408,9 +2684,10 @@ export function TaskNotepad({
           ) : (
             /* GROUPED BY STAGE VIEW */
             <div className="space-y-6">
-              {(["inprogress", "completed", "stopped"] as TaskStage[]).map((stg) => {
+              {projectStages.map((stgItem) => {
+                const stg = stgItem.slug || stgItem.id;
                 const stageTasks = filteredTasks.filter((t) => t.stage === stg);
-                const cfg = STAGE_CONFIG[stg];
+                const cfg = getStageConfig(stg);
 
                 return (
                   <div
@@ -2476,22 +2753,18 @@ export function TaskNotepad({
 
       {/* FOOTER / STATUS BAR */}
       <div className="pt-4 border-t border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-slate-400">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center flex-wrap gap-2.5">
           <span>
             <strong>{totalCount}</strong> total tasks
           </span>
-          <span>•</span>
-          <span className="text-amber-400">
-            <strong>{inProgressCount}</strong> in progress
-          </span>
-          <span>•</span>
-          <span className="text-emerald-400">
-            <strong>{completedCount}</strong> completed
-          </span>
-          <span>•</span>
-          <span className="text-rose-400">
-            <strong>{stoppedCount}</strong> stopped
-          </span>
+          {stageMetrics.map(({ stage, slug, count, cfg }) => (
+            <React.Fragment key={slug}>
+              <span>•</span>
+              <span className="text-slate-300">
+                <strong>{count}</strong> {cfg.label.toLowerCase()}
+              </span>
+            </React.Fragment>
+          ))}
         </div>
 
         <div className="flex items-center gap-3">
@@ -2534,7 +2807,7 @@ export function TaskNotepad({
       {isFormOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-150">
           <div
-            className="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+            className="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
@@ -2582,7 +2855,7 @@ export function TaskNotepad({
                   }
                 }
               }}
-              className="p-6 space-y-4 overflow-y-auto flex-1"
+              className="p-6 md:p-8 space-y-20 overflow-y-auto flex-1"
             >
               {formError && (
                 <div className="p-3 rounded-lg bg-rose-950/50 border border-rose-500/40 text-rose-300 text-xs flex items-center gap-2">
@@ -2592,7 +2865,7 @@ export function TaskNotepad({
               )}
 
               {/* 1. HEADING */}
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
                   <span>Task Heading <span className="text-rose-400">*</span></span>
                   <span className="text-[11px] text-slate-500 font-normal">Required</span>
@@ -2609,19 +2882,39 @@ export function TaskNotepad({
               </div>
 
               {/* IMAGES & ATTACHMENTS (IMAGEKIT.IO) */}
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-semibold text-slate-300 flex items-center gap-2">
                     {/* <span className="text-sm">🖼️</span> */}
-                    <span>Images & Attachments</span>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-950/80 text-purple-300 font-semibold border border-purple-500/30">
-                      {formAttachments.length}
-                    </span>
-                    {/* <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-mono border border-slate-700/60 hidden sm:inline-block">
-                      ImageKit CDN
-                    </span> */}
+                    <span>Attached Screenshot</span>
+                    {formAttachments.length > 0 && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-950/80 text-blue-300 font-semibold border border-blue-500/30">
+                        {formAttachments.length}
+                      </span>
+                    )}
                   </label>
-                  <span className="text-[11px] text-slate-500 font-normal">Optional</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowImageUploader((prev) => !prev)}
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition border cursor-pointer ${
+                        showImageUploader
+                          ? "bg-blue-950/80 border-blue-500/50 text-blue-200"
+                          : "bg-slate-800 hover:bg-slate-700/80 border-slate-700 text-slate-300 hover:text-white"
+                      }`}
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d={showImageUploader ? "M6 18L18 6M6 6l12 12" : "M12 4v16m8-8H4"}
+                        />
+                      </svg>
+                      <span>{showImageUploader ? "Close Uploader" : "Add Image"}</span>
+                    </button>
+                    <span className="text-[11px] text-slate-500 font-normal">Optional</span>
+                  </div>
                 </div>
 
                 {/* Upload Trigger Input */}
@@ -2638,49 +2931,51 @@ export function TaskNotepad({
                   }}
                 />
 
-                {/* Drag and Drop / Browse Card */}
-                <div
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    setIsFormDraggingOver(true);
-                  }}
-                  onDragLeave={() => setIsFormDraggingOver(false)}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    setIsFormDraggingOver(false);
-                    const file = e.dataTransfer.files?.[0];
-                    if (file) {
-                      handleUploadFormAttachment(file);
-                    }
-                  }}
-                  onClick={() => formAttachmentFileInputRef.current?.click()}
-                  className={`p-3.5 rounded-xl border border-dashed transition text-center cursor-pointer select-none ${
-                    isFormDraggingOver
-                      ? "border-purple-400 bg-purple-950/40 text-purple-200"
-                      : "border-slate-800 hover:border-slate-700 bg-slate-950 text-slate-400 hover:text-slate-300"
-                  }`}
-                >
-                  <div className="flex flex-col items-center justify-center gap-1">
-                    {isUploadingFormAttachment ? (
-                      <div className="flex items-center gap-2 text-purple-300 py-1">
-                        <span className="w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
-                        <span className="text-xs font-medium">Uploading to ImageKit CDN...</span>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="flex items-center gap-1.5 text-xs font-medium text-slate-300">
-                          <svg className="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                          </svg>
-                          <span><span className="text-purple-400 hover:underline">Click to upload image</span> or drag here</span>
+                {/* Drag and Drop / Browse Card (hidden by default, toggled via Add Image button) */}
+                {showImageUploader && (
+                  <div
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setIsFormDraggingOver(true);
+                    }}
+                    onDragLeave={() => setIsFormDraggingOver(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setIsFormDraggingOver(false);
+                      const file = e.dataTransfer.files?.[0];
+                      if (file) {
+                        handleUploadFormAttachment(file);
+                      }
+                    }}
+                    onClick={() => formAttachmentFileInputRef.current?.click()}
+                    className={`p-3.5 rounded-xl border border-dashed transition text-center cursor-pointer select-none animate-in fade-in duration-150 ${
+                      isFormDraggingOver
+                        ? "border-blue-400 bg-blue-950/40 text-blue-200"
+                        : "border-slate-800 hover:border-slate-700 bg-slate-950 text-slate-400 hover:text-slate-300"
+                    }`}
+                  >
+                    <div className="flex flex-col items-center justify-center gap-1">
+                      {isUploadingFormAttachment ? (
+                        <div className="flex items-center gap-2 text-blue-300 py-1">
+                          <span className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                          <span className="text-xs font-medium">Uploading to ImageKit CDN...</span>
                         </div>
-                        <span className="text-[10px] text-slate-500">
-                          PNG, JPG, WebP, GIF, SVG (up to 15MB) • Or press <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 font-mono text-[9px]">Ctrl+V</kbd> to paste screenshot
-                        </span>
-                      </>
-                    )}
+                      ) : (
+                        <>
+                          <div className="flex items-center gap-1.5 text-xs font-medium text-slate-300">
+                            <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            <span><span className="text-blue-400 hover:underline">Click to upload image</span> or drag here</span>
+                          </div>
+                          <span className="text-[10px] text-slate-500">
+                            PNG, JPG, WebP, GIF, SVG (up to 15MB) • Or press <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 font-mono text-[9px]">Ctrl+V</kbd> to paste screenshot
+                          </span>
+                        </>
+                      )}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Form Attachment Error */}
                 {formAttachmentError && (
@@ -2698,11 +2993,11 @@ export function TaskNotepad({
 
                 {/* Attached Images Grid in Form */}
                 {formAttachments.length > 0 && (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-1">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 pt-1">
                     {formAttachments.map((att) => (
                       <div
                         key={att.fileId}
-                        className="group/formimg relative rounded-xl overflow-hidden bg-slate-900 border border-slate-800 hover:border-purple-500/50 transition flex flex-col"
+                        className="group/formimg relative rounded-xl overflow-hidden bg-slate-900 border border-slate-800 hover:border-blue-500/50 transition flex flex-col"
                       >
                         <div
                           onClick={() => setLightboxAttachment(att)}
@@ -2733,8 +3028,286 @@ export function TaskNotepad({
                 )}
               </div>
 
+              {/* VOICE EXPLANATION / AUDIO NOTE (ImageKit.io Free Tier) */}
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                    <span className="text-sm">🎙️</span>
+                    <span>Voice Explanation</span>
+                    {formVoiceNote && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950/80 text-emerald-300 font-semibold border border-emerald-500/30">
+                        Recorded
+                      </span>
+                    )}
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowVoiceRecorder((prev) => !prev)}
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition border cursor-pointer ${
+                        showVoiceRecorder
+                          ? "bg-blue-950/80 border-blue-500/50 text-blue-200"
+                          : "bg-slate-800 hover:bg-slate-700/80 border-slate-700 text-slate-300 hover:text-white"
+                      }`}
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d={showVoiceRecorder ? "M6 18L18 6M6 6l12 12" : "M12 4v16m8-8H4"}
+                        />
+                      </svg>
+                      <span>{showVoiceRecorder ? "Close Voice" : formVoiceNote ? "Replace Voice" : "+ Add Voice"}</span>
+                    </button>
+                    <span className="text-[11px] text-slate-500 font-normal">Optional</span>
+                  </div>
+                </div>
+
+                {/* Hidden Audio File Input */}
+                <input
+                  type="file"
+                  ref={voiceFileInputRef}
+                  accept="audio/*,.mp3,.m4a,.wav,.ogg,.webm,.aac,.flac"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      handleUploadVoiceFile(file);
+                      setShowVoiceRecorder(false);
+                    }
+                  }}
+                />
+
+                {/* If a voice note already exists in the form */}
+                {formVoiceNote && (
+                  <div className="p-3 rounded-xl bg-gradient-to-r from-slate-900 via-blue-950/25 to-slate-900 border border-blue-500/30 shadow-md space-y-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="w-8 h-8 rounded-lg bg-blue-500/20 text-blue-300 flex items-center justify-center shrink-0 border border-blue-500/30">
+                          🎙️
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-slate-200 truncate" title={formVoiceNote.name}>
+                            {formVoiceNote.name || "Task Voice Explanation"}
+                          </p>
+                          <div className="flex items-center gap-2 text-[10px] text-slate-400">
+                            {formVoiceNote.duration ? (
+                              <span>Duration: {formatAudioDuration(formVoiceNote.duration)}</span>
+                            ) : null}
+                            {formVoiceNote.size ? (
+                              <span>• {formatFileSize(formVoiceNote.size)}</span>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={handleRemoveFormVoiceNote}
+                          className="px-2.5 py-1 text-xs rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 transition flex items-center gap-1 cursor-pointer"
+                          title="Delete voice note"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                          <span>Remove</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Audio Player */}
+                    <div className="rounded-lg overflow-hidden bg-slate-950 p-1.5 border border-slate-800">
+                      <audio controls src={formVoiceNote.url} className="w-full h-8" preload="metadata" />
+                    </div>
+                  </div>
+                )}
+
+                {/* Live Recording In-Progress Banner with Real-Time Audio Level Visualizer */}
+                {isRecordingVoice && (
+                  <div className="p-3.5 rounded-xl bg-gradient-to-r from-slate-900 via-blue-950/40 to-slate-900 border border-rose-500/50 shadow-lg flex items-center justify-between gap-3 flex-wrap animate-in fade-in duration-150">
+                    <div className="flex items-center gap-3">
+                      <div className="relative flex items-center justify-center">
+                        <span className="w-3 h-3 rounded-full bg-rose-500 animate-ping absolute" />
+                        <span className="w-3 h-3 rounded-full bg-rose-500 relative" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-rose-300 uppercase tracking-wider">Recording Voice</span>
+                          <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded bg-rose-500/20 text-rose-200 border border-rose-500/40">
+                            {formatAudioDuration(recordingSeconds)}
+                          </span>
+                        </div>
+                        {/* Live mic detection indicator */}
+                        <div className="flex items-center gap-2 mt-1">
+                          {micAudioLevel > 0.04 ? (
+                            <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-emerald-400">
+                              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                              Microphone active & receiving sound
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-amber-400">
+                              <span className="w-2 h-2 rounded-full bg-amber-400" />
+                              No sound detected — speak into microphone
+                            </span>
+                          )}
+                        </div>
+                        {activeMicLabel && (
+                          <div className="text-[10px] text-slate-400 flex items-center gap-1.5 mt-0.5">
+                            <span>Using:</span>
+                            <span className="font-semibold text-slate-300 truncate max-w-[200px]" title={activeMicLabel}>
+                              {activeMicLabel}
+                            </span>
+                            {/droidcam/i.test(activeMicLabel) && (
+                              <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 font-bold text-[9px] border border-amber-500/40">
+                                Virtual Mic (Idle)
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Live Equalizer Visualizer Bars */}
+                    <div className="flex items-center gap-2 bg-slate-950/90 px-3 py-1.5 rounded-lg border border-slate-800">
+                      <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Mic Level</span>
+                      <div className="flex items-end gap-1 h-5 w-20">
+                        {[0.08, 0.22, 0.40, 0.60, 0.80].map((threshold, idx) => {
+                          const isActive = micAudioLevel >= threshold;
+                          const heightPct = isActive
+                            ? Math.min(100, Math.max(35, Math.round((micAudioLevel / threshold) * 75)))
+                            : 20;
+                          return (
+                            <div
+                              key={idx}
+                              style={{ height: `${heightPct}%` }}
+                              className={`flex-1 rounded-sm transition-all duration-75 ${
+                                isActive
+                                  ? idx >= 4
+                                    ? "bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)]"
+                                    : idx >= 3
+                                    ? "bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.5)]"
+                                    : "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]"
+                                  : "bg-slate-800"
+                              }`}
+                            />
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={stopVoiceRecording}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md transition flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span>Stop & Save</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={cancelVoiceRecording}
+                        className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Default Voice Note Options Window of Explanation (hidden until "+ Add Voice" is clicked) */}
+                {showVoiceRecorder && !isRecordingVoice && (
+                  <div className="p-3 rounded-xl border border-dashed border-slate-800 bg-slate-950 flex flex-col sm:flex-row items-center justify-between gap-2.5 animate-in fade-in duration-150">
+                    <div className="flex items-center gap-2.5 text-left w-full sm:w-auto">
+                      <div className="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 shrink-0">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-slate-300">
+                          Explain task faster with your voice
+                        </p>
+                        <p className="text-[10px] text-slate-500">
+                          Record directly or upload .mp3/.m4a audio file (stored on free ImageKit CDN)
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap">
+                      {/* Microphone Device Picker */}
+                      {audioDevices.length > 0 && (
+                        <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-900 border border-slate-800 text-xs">
+                          <span className="text-[10px] text-slate-400 font-medium">Mic:</span>
+                          <select
+                            value={selectedAudioDeviceId}
+                            onChange={(e) => setSelectedAudioDeviceId(e.target.value)}
+                            className="bg-transparent text-slate-200 text-xs focus:outline-none cursor-pointer max-w-[160px] truncate"
+                            title="Select your microphone input"
+                          >
+                            {audioDevices.map((d) => (
+                              <option key={d.deviceId} value={d.deviceId} className="bg-slate-900 text-slate-200">
+                                {d.label || "Microphone"} {/droidcam/i.test(d.label) ? "(Virtual - Silent if idle)" : ""}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {isUploadingVoice ? (
+                        <div className="flex items-center gap-2 px-3 py-1.5 text-xs text-blue-300">
+                          <span className="w-3.5 h-3.5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                          <span>Uploading audio...</span>
+                        </div>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => startVoiceRecording()}
+                            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-sm transition cursor-pointer"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                            </svg>
+                            <span>Record Mic</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => voiceFileInputRef.current?.click()}
+                            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-medium border border-slate-700 transition cursor-pointer"
+                          >
+                            <svg className="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                            </svg>
+                            <span>Upload File</span>
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Voice Error Notice */}
+                {voiceError && (
+                  <div className="p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-xs text-rose-300 flex items-center justify-between gap-2">
+                    <span>⚠️ {voiceError}</span>
+                    <button
+                      type="button"
+                      onClick={() => setVoiceError(null)}
+                      className="text-rose-400 hover:text-white"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
+              </div>
+
               {/* 2. DESCRIPTION */}
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
                   <span>Description</span>
                   <span className="text-[11px] text-slate-500 font-normal">Optional</span>
@@ -2749,7 +3322,7 @@ export function TaskNotepad({
               </div>
 
               {/* FOLDER / CATEGORY SELECTOR */}
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-semibold text-slate-300">
                     Folder <span className="text-slate-500 font-normal">(Optional)</span>
@@ -2837,95 +3410,72 @@ export function TaskNotepad({
               </div>
 
               {/* 3. STATUS (IN PROGRESS, COMPLETED, STOPPED) */}
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 <label className="text-xs font-semibold text-slate-300 block">
                   Status Stage <span className="text-rose-400">*</span>
                 </label>
-                <div className="grid grid-cols-3 gap-2.5">
-                  {/* In Progress Radio Card */}
-                  <button
-                    type="button"
-                    onClick={() => setFormStatus("inprogress")}
-                    className={`p-2.5 rounded-xl border text-left flex flex-col justify-between transition cursor-pointer ${
-                      formStatus === "inprogress"
-                        ? "bg-amber-500/15 border-amber-500/60 ring-1 ring-amber-500/40 text-amber-300"
-                        : "bg-slate-950 border-slate-800 text-slate-400 hover:border-amber-500/30"
-                    }`}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-amber-400" />
-                      <span className="text-xs font-bold">In Progress</span>
-                    </div>
-                    <span className="text-[10px] text-slate-500 mt-1">Active work</span>
-                  </button>
-
-                  {/* Completed Radio Card */}
-                  <button
-                    type="button"
-                    onClick={() => setFormStatus("completed")}
-                    className={`p-2.5 rounded-xl border text-left flex flex-col justify-between transition cursor-pointer ${
-                      formStatus === "completed"
-                        ? "bg-emerald-500/15 border-emerald-500/60 ring-1 ring-emerald-500/40 text-emerald-300"
-                        : "bg-slate-950 border-slate-800 text-slate-400 hover:border-emerald-500/30"
-                    }`}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                      <span className="text-xs font-bold">Completed</span>
-                    </div>
-                    <span className="text-[10px] text-slate-500 mt-1">Finished</span>
-                  </button>
-
-                  {/* Stopped Radio Card */}
-                  <button
-                    type="button"
-                    onClick={() => setFormStatus("stopped")}
-                    className={`p-2.5 rounded-xl border text-left flex flex-col justify-between transition cursor-pointer ${
-                      formStatus === "stopped"
-                        ? "bg-rose-500/15 border-rose-500/60 ring-1 ring-rose-500/40 text-rose-300"
-                        : "bg-slate-950 border-slate-800 text-slate-400 hover:border-rose-500/30"
-                    }`}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-rose-400" />
-                      <span className="text-xs font-bold">Stopped</span>
-                    </div>
-                    <span className="text-[10px] text-slate-500 mt-1">Blocked / Paused</span>
-                  </button>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                  {projectStages.map((stg) => {
+                    const slug = stg.slug || stg.id;
+                    const c = getStageConfig(slug);
+                    const isSelected = formStatus === slug;
+                    return (
+                      <button
+                        key={slug}
+                        type="button"
+                        onClick={() => setFormStatus(slug)}
+                        className={`p-2.5 rounded-xl border text-left flex flex-col justify-between transition cursor-pointer min-h-[66px] ${
+                          isSelected
+                            ? `${c.badgeClass} ${c.ringClass} ring-1 font-semibold shadow-sm`
+                            : "bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700"
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <span className={`w-2 h-2 rounded-full ${c.dotClass}`} />
+                          <span className="text-xs font-bold">{c.label}</span>
+                        </div>
+                        {c.description && (
+                          <span className="text-[10px] text-slate-500 mt-1 leading-tight">{c.description}</span>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
               {/* 4. DATES: STARTING DATE & END DATE */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
-                    <span>Starting Date</span>
-                    <span className="text-[11px] text-slate-500 font-normal">Optional</span>
-                  </label>
-                  <input
-                    type="date"
-                    value={formStartDate}
-                    onChange={(e) => setFormStartDate(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition [color-scheme:dark]"
-                  />
-                </div>
+              <div className="space-y-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
+                      <span>Starting Date</span>
+                      <span className="text-[11px] text-slate-500 font-normal">Optional</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={formStartDate}
+                      onChange={(e) => setFormStartDate(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition [color-scheme:dark]"
+                    />
+                  </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
-                    <span>End Date</span>
-                    <span className="text-[11px] text-slate-500 font-normal">Optional</span>
-                  </label>
-                  <input
-                    type="date"
-                    value={formEndDate}
-                    onChange={(e) => setFormEndDate(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition [color-scheme:dark]"
-                  />
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
+                      <span>End Date</span>
+                      <span className="text-[11px] text-slate-500 font-normal">Optional</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={formEndDate}
+                      onChange={(e) => setFormEndDate(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition [color-scheme:dark]"
+                    />
+                  </div>
                 </div>
               </div>
 
               {/* 5. COMMENTS */}
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
                   <span>Comments & Notes</span>
                   <span className="text-[11px] text-slate-500 font-normal">Optional</span>
@@ -3366,12 +3916,18 @@ export function TaskNotepad({
                         }
                         aria-label="Change task status in drawer"
                         className={`text-xs font-semibold px-2.5 py-1 rounded-lg border appearance-none pr-6 outline-none transition-colors ${
-                          STAGE_CONFIG[activeDetailTask.stage].badgeClass
+                          getStageConfig(activeDetailTask.stage).badgeClass
                         } ${isReadOnly ? "cursor-not-allowed opacity-80" : "cursor-pointer"}`}
                       >
-                        <option value="inprogress" className="bg-slate-900 text-amber-400">⏳ In Progress</option>
-                        <option value="completed" className="bg-slate-900 text-emerald-400">✓ Completed</option>
-                        <option value="stopped" className="bg-slate-900 text-rose-400">⏹ Stopped</option>
+                        {projectStages.map((stg) => {
+                          const slug = stg.slug || stg.id;
+                          const c = getStageConfig(slug);
+                          return (
+                            <option key={slug} value={slug} className="bg-slate-900 text-slate-100">
+                              {c.label}
+                            </option>
+                          );
+                        })}
                       </select>
                       <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-1.5 text-current opacity-70">
                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -3424,11 +3980,9 @@ export function TaskNotepad({
                         <span className="text-xs sm:text-sm font-bold text-slate-200 uppercase tracking-wider">
                           Task Title
                         </span>
-                        {activeDetailTask.stage === "completed" && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 font-medium border border-emerald-500/30">
-                            ✓ Completed
-                          </span>
-                        )}
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium border ${getStageConfig(activeDetailTask.stage).badgeClass}`}>
+                          {getStageConfig(activeDetailTask.stage).label}
+                        </span>
                       </div>
 
                       {/* Right-aligned Metadata Badges with Headings */}
@@ -3489,15 +4043,73 @@ export function TaskNotepad({
                     </div>
                   </div>
 
+                  {/* Task Voice Note / Explanation (View & Listen in Task Workspace) */}
+                  {activeDetailTask.voiceNote && (
+                    <div className="p-3.5 rounded-xl bg-gradient-to-r from-slate-900 via-blue-950/25 to-slate-900 border border-blue-500/30 shadow-md space-y-2.5">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="w-8 h-8 rounded-lg bg-blue-500/20 text-blue-300 flex items-center justify-center shrink-0 border border-blue-500/40 shadow-inner">
+                            🎙️
+                          </span>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <h3 className="text-xs font-bold text-white tracking-wide">
+                                Voice Explanation
+                              </h3>
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-950/80 text-blue-300 font-semibold border border-blue-500/30">
+                                Audio Note
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
+                              {activeDetailTask.voiceNote.duration ? (
+                                <span>Duration: {formatAudioDuration(activeDetailTask.voiceNote.duration)}</span>
+                              ) : null}
+                              {activeDetailTask.voiceNote.size ? (
+                                <span>• {formatFileSize(activeDetailTask.voiceNote.size)}</span>
+                              ) : null}
+                              <span>• Stored on ImageKit CDN</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <a
+                            href={activeDetailTask.voiceNote.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            download={activeDetailTask.voiceNote.name}
+                            className="px-2.5 py-1 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition flex items-center gap-1 cursor-pointer"
+                            title="Download / Open original audio file"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                            <span>Audio</span>
+                          </a>
+                        </div>
+                      </div>
+
+                      {/* Native HTML5 Audio Player */}
+                      <div className="rounded-lg overflow-hidden bg-slate-950 p-2 border border-slate-800 shadow-inner">
+                        <audio
+                          controls
+                          src={activeDetailTask.voiceNote.url}
+                          className="w-full h-8"
+                          preload="metadata"
+                        />
+                      </div>
+                    </div>
+                  )}
+
                   {/* Task Attachments & Images Section (View Only in Task Workspace) */}
                   {activeDetailTask.attachments && activeDetailTask.attachments.length > 0 && (
                     <div className="space-y-3 pt-3 border-t border-slate-800/80">
                       <div className="flex items-center justify-between flex-wrap gap-2">
                         <div className="flex items-center gap-2">
                           <h3 className="text-sm font-bold text-white tracking-wide">
-                            Images & Attachments
+                            Attached Screenshot
                           </h3>
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-purple-950/80 text-purple-300 font-semibold border border-purple-500/30">
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-blue-950/80 text-blue-300 font-semibold border border-blue-500/30">
                             {activeDetailTask.attachments.length}
                           </span>
                         </div>
@@ -3508,7 +4120,7 @@ export function TaskNotepad({
                         {activeDetailTask.attachments.map((att) => (
                           <div
                             key={att.fileId}
-                            className="group/img relative rounded-xl overflow-hidden bg-slate-950 border border-slate-800 hover:border-purple-500/50 transition-all shadow-sm flex flex-col"
+                            className="group/img relative rounded-xl overflow-hidden bg-slate-950 border border-slate-800 hover:border-blue-500/50 transition-all shadow-sm flex flex-col"
                           >
                             {/* Thumbnail preview */}
                             <div
@@ -3537,7 +4149,7 @@ export function TaskNotepad({
                                 <p
                                   title={att.name}
                                   onClick={() => setLightboxAttachment(att)}
-                                  className="text-[11px] font-semibold text-slate-200 truncate hover:text-purple-300 cursor-pointer"
+                                  className="text-[11px] font-semibold text-slate-200 truncate hover:text-blue-300 cursor-pointer"
                                 >
                                   {att.name}
                                 </p>

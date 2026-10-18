@@ -1,7 +1,13 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import type { Project, Section, ProjectViewTab, ProjectRole } from "@/lib/types";
+import type { Project, Section, ProjectViewTab, ProjectRole, ProjectStatusStage, StageColor } from "@/lib/types";
+import {
+  DEFAULT_STATUS_STAGES,
+  STAGE_PRESET_TEMPLATES,
+  QUICK_STAGE_SUGGESTIONS,
+  AVAILABLE_STAGE_COLORS,
+} from "@/lib/stage-presets";
 import { Sidebar } from "@/components/Sidebar";
 import { TemplateEditor } from "@/components/TemplateEditor";
 import { LivePreview } from "@/components/LivePreview";
@@ -42,6 +48,11 @@ export default function ProjectTemplateBuilder() {
   const [newProjectName, setNewProjectName] = useState("");
   const [newProjectFolders, setNewProjectFolders] = useState<string[]>([]);
   const [customFolderInput, setCustomFolderInput] = useState("");
+  const [newProjectStages, setNewProjectStages] = useState<ProjectStatusStage[]>(DEFAULT_STATUS_STAGES);
+  const [customStageName, setCustomStageName] = useState("");
+  const [customStageColor, setCustomStageColor] = useState<StageColor>("blue");
+  const [customStageDesc, setCustomStageDesc] = useState("");
+  const [activePresetKey, setActivePresetKey] = useState<string>("standard");
 
   // 1. Check Authentication Status on mount
   const checkAuth = useCallback(async () => {
@@ -259,6 +270,11 @@ export default function ProjectTemplateBuilder() {
     setNewProjectName(`New Project ${projects.length + 1}`);
     setNewProjectFolders([]);
     setCustomFolderInput("");
+    setNewProjectStages(DEFAULT_STATUS_STAGES);
+    setActivePresetKey("standard");
+    setCustomStageName("");
+    setCustomStageDesc("");
+    setCustomStageColor("blue");
     setIsCreateModalOpen(true);
   };
 
@@ -272,6 +288,7 @@ export default function ProjectTemplateBuilder() {
       createdAt: Date.now(),
       sections: [],
       taskFolders: newProjectFolders,
+      statusStages: newProjectStages.length > 0 ? newProjectStages : DEFAULT_STATUS_STAGES,
     };
 
     setProjects((prev) => [newProj, ...prev]);
@@ -288,6 +305,13 @@ export default function ProjectTemplateBuilder() {
   const handleUpdateProjectFolders = async (folders: string[]) => {
     if (!activeProject || isReadOnly) return;
     const updated: Project = { ...activeProject, taskFolders: folders };
+    setProjects((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+    await persistProjectToDb(updated);
+  };
+
+  const handleUpdateProjectStages = async (stages: ProjectStatusStage[]) => {
+    if (!activeProject || isReadOnly) return;
+    const updated: Project = { ...activeProject, statusStages: stages };
     setProjects((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
     await persistProjectToDb(updated);
   };
@@ -903,6 +927,7 @@ export default function ProjectTemplateBuilder() {
                 userPermission={activeProject.currentUserPermission}
                 onUpdateTasks={updateActiveProjectTasks}
                 onUpdateProjectFolders={handleUpdateProjectFolders}
+                onUpdateProjectStages={handleUpdateProjectStages}
                 onManualSave={handleManualSaveTasks}
                 saveStatus={saveStatus}
               />
@@ -953,15 +978,15 @@ export default function ProjectTemplateBuilder() {
           </div>
         )}
 
-        {/* CREATE NEW PROJECT MODAL WITH FOLDERS */}
+        {/* CREATE NEW PROJECT MODAL WITH FOLDERS & STATUS STAGES */}
         {isCreateModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
             <div
-              className="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-150"
+              className="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-[750px] max-h-[90vh] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-150"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
-              <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/60">
+              <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/60 shrink-0">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-lg bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -970,7 +995,7 @@ export default function ProjectTemplateBuilder() {
                   </div>
                   <div>
                     <h3 className="text-base font-bold text-white tracking-tight">Create New Project</h3>
-                    <p className="text-xs text-slate-400">Set up your project and optional task folders</p>
+                    <p className="text-xs text-slate-400">Set up your project, task folders, and custom status stages</p>
                   </div>
                 </div>
                 <button
@@ -983,7 +1008,7 @@ export default function ProjectTemplateBuilder() {
               </div>
 
               {/* Form */}
-              <form onSubmit={handleConfirmCreateProject} className="p-6 space-y-5">
+              <form onSubmit={handleConfirmCreateProject} className="p-6 space-y-16 overflow-y-auto flex-1">
                 {/* Project Name */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-slate-300 block">Project Name *</label>
@@ -999,7 +1024,7 @@ export default function ProjectTemplateBuilder() {
                 </div>
 
                 {/* Task Folders Configuration */}
-                <div className="space-y-2.5">
+                <div className="space-y-2.5 pt-1">
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-semibold text-slate-300">
                       Task Folders <span className="text-slate-500 font-normal">(Optional)</span>
@@ -1094,14 +1119,240 @@ export default function ProjectTemplateBuilder() {
                       ))}
                     </div>
                   )}
+                </div>
 
-                  <p className="text-[11px] text-slate-500 leading-relaxed pt-1">
-                    You can also create, rename, or delete folders inside existing projects at any time from the Tasks tab.
-                  </p>
+                {/* Status Stage Configuration (Project Level) */}
+                <div className="space-y-3 pt-3 border-t border-slate-800/80">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs font-semibold text-slate-300">
+                        Status Stages <span className="text-blue-400">*</span>
+                      </label>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-500/15 border border-blue-500/30 text-blue-300">
+                        Dynamic Workflow
+                      </span>
+                    </div>
+                    <span className="text-[11px] text-slate-400">Project-level task stages</span>
+                  </div>
+
+                  {/* Preset Workflow Templates */}
+                  <div className="space-y-1.5">
+                    <span className="text-[11px] text-slate-400">Workflow Presets:</span>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                      {STAGE_PRESET_TEMPLATES.map((tpl) => {
+                        const isPresetActive = activePresetKey === tpl.id;
+                        return (
+                          <button
+                            key={tpl.id}
+                            type="button"
+                            onClick={() => {
+                              setActivePresetKey(tpl.id);
+                              setNewProjectStages(tpl.stages);
+                            }}
+                            className={`p-2 rounded-xl text-left border transition cursor-pointer flex flex-col justify-between ${
+                              isPresetActive
+                                ? "bg-blue-600/20 border-blue-500/60 ring-1 ring-blue-500/40 text-white"
+                                : "bg-slate-950 hover:bg-slate-800/80 border-slate-800 text-slate-300"
+                            }`}
+                          >
+                            <span className="text-xs font-semibold leading-tight">{tpl.name}</span>
+                            <span className="text-[10px] text-slate-400 mt-1">
+                              {tpl.stages.length} stages
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Quick Stage Suggestions */}
+                  <div className="space-y-1.5">
+                    <span className="text-[11px] text-slate-400">Quick Add Stages:</span>
+                    <div className="flex items-center flex-wrap gap-1.5">
+                      {QUICK_STAGE_SUGGESTIONS.map((sug) => {
+                        const slug = sug.name.toLowerCase().replace(/[^a-z0-9]+/g, "_");
+                        const isAdded = newProjectStages.some((s) => (s.slug && s.slug === slug) || (s.name && s.name.toLowerCase() === sug.name.toLowerCase()) || (s.label && s.label.toLowerCase() === sug.name.toLowerCase()));
+                        return (
+                          <button
+                            key={sug.name}
+                            type="button"
+                            disabled={isAdded}
+                            onClick={() => {
+                              if (!isAdded) {
+                                setNewProjectStages((prev) => [
+                                  ...prev,
+                                  {
+                                    id: `stage-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                                    name: sug.name,
+                                    slug,
+                                    color: sug.color,
+                                    description: sug.description,
+                                  },
+                                ]);
+                                setActivePresetKey("custom");
+                              }
+                            }}
+                            className={`px-2 py-0.5 rounded-lg text-xs font-medium transition flex items-center gap-1 ${
+                              isAdded
+                                ? "bg-slate-900 text-slate-500 border border-slate-800/60 opacity-60 cursor-not-allowed"
+                                : "bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-800 cursor-pointer"
+                            }`}
+                          >
+                            <span>{isAdded ? "✓" : "+"}</span>
+                            <span>{sug.name}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Active Stages in this Project */}
+                  <div className="space-y-1.5 pt-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-slate-400">Active Stages for this project ({newProjectStages.length}):</span>
+                      {newProjectStages.length < 2 && (
+                        <span className="text-[10px] text-amber-400">At least 1 stage is required</span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-2 p-2.5 bg-slate-950/80 rounded-xl border border-slate-800">
+                      {newProjectStages.map((stage, idx) => {
+                        const dotColorMap: Record<StageColor, string> = {
+                          amber: "bg-amber-400",
+                          emerald: "bg-emerald-400",
+                          rose: "bg-rose-400",
+                          blue: "bg-blue-400",
+                          purple: "bg-purple-400",
+                          cyan: "bg-cyan-400",
+                          indigo: "bg-indigo-400",
+                          pink: "bg-pink-400",
+                          orange: "bg-orange-400",
+                          teal: "bg-teal-400",
+                          slate: "bg-slate-400",
+                        };
+                        const dotColor = dotColorMap[stage.color] || "bg-blue-400";
+
+                        return (
+                          <div
+                            key={stage.id || stage.slug}
+                            className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs font-medium text-slate-200 shadow-sm"
+                          >
+                            <span className="text-[10px] text-slate-500 font-mono">#{idx + 1}</span>
+                            <span className={`w-2 h-2 rounded-full ${dotColor}`} />
+                            <div className="flex flex-col text-left">
+                              <span className="font-semibold text-slate-100">{stage.name || stage.label || stage.slug || stage.id}</span>
+                              {stage.description && (
+                                <span className="text-[9px] text-slate-400 leading-tight">{stage.description}</span>
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              disabled={newProjectStages.length <= 1}
+                              onClick={() => {
+                                if (newProjectStages.length > 1) {
+                                  setNewProjectStages((prev) => prev.filter((s) => (s.id ? s.id !== stage.id : s.slug !== stage.slug)));
+                                  setActivePresetKey("custom");
+                                }
+                              }}
+                              title={newProjectStages.length <= 1 ? "At least one stage is required" : `Remove ${stage.name}`}
+                              className="ml-1 text-slate-500 hover:text-rose-400 disabled:opacity-30 disabled:hover:text-slate-500 transition cursor-pointer"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Create Custom Stage */}
+                  <div className="space-y-2 pt-2 bg-slate-950/40 p-3 rounded-xl border border-slate-800/80">
+                    <span className="text-[11px] font-semibold text-slate-300 block">Add Custom Stage:</span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        value={customStageName}
+                        onChange={(e) => setCustomStageName(e.target.value)}
+                        placeholder="Stage name (e.g. QA Review)..."
+                        className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-blue-500"
+                      />
+                      <input
+                        type="text"
+                        value={customStageDesc}
+                        onChange={(e) => setCustomStageDesc(e.target.value)}
+                        placeholder="Optional subtitle (e.g. Under Review)..."
+                        className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between flex-wrap gap-2 pt-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[11px] text-slate-400 mr-1">Color:</span>
+                        {AVAILABLE_STAGE_COLORS.map((col) => {
+                          const bgDots: Record<StageColor, string> = {
+                            amber: "bg-amber-400",
+                            emerald: "bg-emerald-400",
+                            rose: "bg-rose-400",
+                            blue: "bg-blue-400",
+                            purple: "bg-purple-400",
+                            cyan: "bg-cyan-400",
+                            indigo: "bg-indigo-400",
+                            pink: "bg-pink-400",
+                            orange: "bg-orange-400",
+                            teal: "bg-teal-400",
+                            slate: "bg-slate-400",
+                          };
+                          const isSelected = customStageColor === col;
+                          return (
+                            <button
+                              key={col}
+                              type="button"
+                              onClick={() => setCustomStageColor(col)}
+                              title={col}
+                              className={`w-5 h-5 rounded-full ${bgDots[col]} transition cursor-pointer flex items-center justify-center ${
+                                isSelected ? "ring-2 ring-white ring-offset-2 ring-offset-slate-950 scale-110" : "opacity-70 hover:opacity-100"
+                              }`}
+                            >
+                              {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-slate-950" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <button
+                        type="button"
+                        disabled={!customStageName.trim()}
+                        onClick={() => {
+                          const name = customStageName.trim();
+                          if (!name) return;
+                          const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "_");
+                          if (newProjectStages.some((s) => s.slug === slug)) {
+                            alert("A stage with this name or slug already exists.");
+                            return;
+                          }
+                          setNewProjectStages((prev) => [
+                            ...prev,
+                            {
+                              id: `stage-${Date.now()}`,
+                              name,
+                              slug,
+                              color: customStageColor,
+                              description: customStageDesc.trim() || undefined,
+                            },
+                          ]);
+                          setCustomStageName("");
+                          setCustomStageDesc("");
+                          setActivePresetKey("custom");
+                        }}
+                        className="px-3.5 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded-xl transition cursor-pointer disabled:cursor-not-allowed shadow-sm"
+                      >
+                        + Add Stage
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Actions */}
-                <div className="pt-3 border-t border-slate-800 flex items-center justify-end gap-2.5">
+                <div className="pt-4 border-t border-slate-800 flex items-center justify-end gap-2.5 shrink-0">
                   <button
                     type="button"
                     onClick={() => setIsCreateModalOpen(false)}
