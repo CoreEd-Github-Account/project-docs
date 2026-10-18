@@ -1,4 +1,4 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { findUserByUsername } from "./db";
 import {
   verifyPassword,
@@ -43,12 +43,29 @@ export async function authenticateCredentials(
 }
 
 /**
- * Get the currently authenticated user from session cookie
+ * Get the currently authenticated user from session cookie or Authorization Bearer header
  */
 export async function getAuthenticatedUser(): Promise<AuthResult> {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get(AUTH_COOKIE_NAME)?.value;
+    let token: string | undefined;
+
+    // 1. Check Authorization Bearer header (for mobile / API clients)
+    try {
+      const headerStore = await headers();
+      const authHeader = headerStore.get("authorization");
+      if (authHeader && authHeader.toLowerCase().startsWith("bearer ")) {
+        token = authHeader.substring(7).trim();
+      }
+    } catch {
+      // headers() may not be available in all contexts, ignore
+    }
+
+    // 2. Fall back to cookie (for web browser clients)
+    if (!token) {
+      const cookieStore = await cookies();
+      token = cookieStore.get(AUTH_COOKIE_NAME)?.value;
+    }
+
     if (!token) {
       return { authenticated: false };
     }

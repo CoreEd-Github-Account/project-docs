@@ -83,12 +83,20 @@ export async function POST(request: Request) {
       );
 
       // Auto login after registration
-      await setAuthSessionCookie(newUser.id, newUser.username);
+      const token = await setAuthSessionCookie(newUser.id, newUser.username);
+      const userDetails = await findUserById(newUser.id);
 
       return NextResponse.json({
         success: true,
         authenticated: true,
-        user: { id: newUser.id, username: newUser.username },
+        token,
+        user: {
+          id: newUser.id,
+          username: newUser.username,
+          fullName: userDetails?.fullName || undefined,
+          email: userDetails?.email || undefined,
+          avatarUrl: userDetails?.avatarUrl || undefined,
+        },
       });
     }
 
@@ -153,12 +161,20 @@ export async function POST(request: Request) {
       );
     }
 
-    await setAuthSessionCookie(user.id, user.username);
+    const token = await setAuthSessionCookie(user.id, user.username);
+    const userDetails = await findUserById(user.id);
 
     return NextResponse.json({
       success: true,
       authenticated: true,
-      user: { id: user.id, username: user.username },
+      token,
+      user: {
+        id: user.id,
+        username: user.username,
+        fullName: userDetails?.fullName || undefined,
+        email: userDetails?.email || undefined,
+        avatarUrl: userDetails?.avatarUrl || undefined,
+      },
     });
   } catch (error) {
     console.error("Auth POST error:", error);

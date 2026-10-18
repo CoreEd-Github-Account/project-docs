@@ -12,10 +12,10 @@ export async function GET() {
   try {
     const projects = await getAllProjects(auth.user.id);
     return NextResponse.json(projects);
-  } catch (error) {
+  } catch (error: any) {
     console.error("GET /api/projects error:", error);
     return NextResponse.json(
-      { error: "Failed to fetch projects" },
+      { error: error?.message || "Failed to fetch projects" },
       { status: 500 }
     );
   }

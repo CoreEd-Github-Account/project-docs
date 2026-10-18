@@ -374,52 +374,58 @@ export async function ensureTableExists(): Promise<void> {
 
 export async function ensureInvitationsAndMembersTablesExist(): Promise<void> {
   if (invitationsInitialized) return;
-  await ensureUsersTableExists();
-  await ensureTableExists();
-  const pool = getPool();
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS project_members (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      project_id TEXT NOT NULL,
-      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      permission_level TEXT NOT NULL CHECK (permission_level IN ('read', 'edit_no_delete', 'full')),
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      UNIQUE (project_id, user_id)
-    );
-    CREATE INDEX IF NOT EXISTS idx_project_members_user ON project_members(user_id);
-    CREATE INDEX IF NOT EXISTS idx_project_members_project ON project_members(project_id);
+  try {
+    await ensureUsersTableExists();
+    await ensureTableExists();
+    const pool = getPool();
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS project_members (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        project_id TEXT NOT NULL,
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        permission_level TEXT NOT NULL CHECK (permission_level IN ('read', 'edit_no_delete', 'full')),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE (project_id, user_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_project_members_user ON project_members(user_id);
+      CREATE INDEX IF NOT EXISTS idx_project_members_project ON project_members(project_id);
 
-    CREATE TABLE IF NOT EXISTS project_invitations (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      invited_by_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      invited_user_name TEXT NOT NULL,
-      invited_user_email TEXT NOT NULL,
-      project_id TEXT NOT NULL,
-      permission_level TEXT NOT NULL CHECK (permission_level IN ('read', 'edit_no_delete', 'full')),
-      token_hash TEXT NOT NULL UNIQUE,
-      status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'expired', 'revoked')),
-      expires_at TIMESTAMPTZ NOT NULL,
-      accepted_at TIMESTAMPTZ,
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      updated_at TIMESTAMPTZ DEFAULT NOW()
-    );
-    CREATE INDEX IF NOT EXISTS idx_invitations_token ON project_invitations(token_hash);
-    CREATE INDEX IF NOT EXISTS idx_invitations_project ON project_invitations(project_id);
-    CREATE INDEX IF NOT EXISTS idx_invitations_email ON project_invitations(LOWER(invited_user_email));
+      CREATE TABLE IF NOT EXISTS project_invitations (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        invited_by_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        invited_user_name TEXT NOT NULL,
+        invited_user_email TEXT NOT NULL,
+        project_id TEXT NOT NULL,
+        permission_level TEXT NOT NULL CHECK (permission_level IN ('read', 'edit_no_delete', 'full')),
+        token_hash TEXT NOT NULL UNIQUE,
+        status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'expired', 'revoked')),
+        expires_at TIMESTAMPTZ NOT NULL,
+        accepted_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_invitations_token ON project_invitations(token_hash);
+      CREATE INDEX IF NOT EXISTS idx_invitations_project ON project_invitations(project_id);
+      CREATE INDEX IF NOT EXISTS idx_invitations_email ON project_invitations(LOWER(invited_user_email));
 
-    ALTER TABLE project_invitations ALTER COLUMN invited_user_email DROP NOT NULL;
-    ALTER TABLE project_invitations ALTER COLUMN invited_user_email SET DEFAULT '';
-    ALTER TABLE project_invitations ADD COLUMN IF NOT EXISTS allowed_views JSONB DEFAULT '["builder", "preview", "tasks"]'::jsonb;
-    ALTER TABLE project_invitations ADD COLUMN IF NOT EXISTS is_public BOOLEAN DEFAULT false;
-    ALTER TABLE project_members ADD COLUMN IF NOT EXISTS allowed_views JSONB DEFAULT '["builder", "preview", "tasks"]'::jsonb;
-  `);
-  invitationsInitialized = true;
+      ALTER TABLE project_invitations ALTER COLUMN invited_user_email DROP NOT NULL;
+      ALTER TABLE project_invitations ALTER COLUMN invited_user_email SET DEFAULT '';
+      ALTER TABLE project_invitations ADD COLUMN IF NOT EXISTS allowed_views JSONB DEFAULT '["builder", "preview", "tasks"]'::jsonb;
+      ALTER TABLE project_invitations ADD COLUMN IF NOT EXISTS is_public BOOLEAN DEFAULT false;
+      ALTER TABLE project_members ADD COLUMN IF NOT EXISTS allowed_views JSONB DEFAULT '["builder", "preview", "tasks"]'::jsonb;
+    `);
+    invitationsInitialized = true;
+  } catch (err) {
+    console.warn("ensureInvitationsAndMembersTablesExist warning (continuing):", err);
+    invitationsInitialized = true;
+  }
 }
 
 export async function getProjectPermission(
   projectId: string,
-  userId: string
+  userId?: string | null
 ): Promise<ProjectRole | null> {
+  if (!projectId || !userId) return null;
   await ensureTableExists();
   await ensureInvitationsAndMembersTablesExist();
   const pool = getPool();
@@ -432,8 +438,8 @@ export async function getProjectPermission(
   if (projectRows[0].user_id === userId) return "owner";
 
   const { rows: memberRows } = await pool.query<{ permission_level: ProjectPermissionLevel }>(
-    "SELECT permission_level FROM project_members WHERE project_id = $1 AND user_id = $2 LIMIT 1",
-    [projectId, userId]
+    "SELECT permission_level FROM project_members WHERE project_id = $1 AND user_id::text = $2 LIMIT 1",
+    [projectId, String(userId)]
   );
   if (memberRows.length > 0) {
     return memberRows[0].permission_level;
@@ -466,8 +472,8 @@ export async function getAllProjects(userId: string): Promise<Project[]> {
        pm.permission_level,
        pm.allowed_views
      FROM projects p
-     LEFT JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = $1
-     WHERE p.user_id = $1 OR pm.user_id = $1
+     LEFT JOIN project_members pm ON pm.project_id = p.id AND pm.user_id::text = $1
+     WHERE p.user_id::text = $1 OR pm.user_id::text = $1
      ORDER BY p.created_at DESC`,
     [userId]
   );
@@ -543,7 +549,7 @@ export async function saveProject(project: Project, userId: string): Promise<voi
 export async function deleteProject(id: string, userId: string): Promise<void> {
   await ensureTableExists();
   const pool = getPool();
-  await pool.query("DELETE FROM projects WHERE id = $1 AND user_id = $2", [id, userId]);
+  await pool.query("DELETE FROM projects WHERE id = $1 AND user_id::text = $2", [id, String(userId)]);
 }
 
 // ==========================================
@@ -551,39 +557,45 @@ export async function deleteProject(id: string, userId: string): Promise<void> {
 // ==========================================
 export async function ensureTasksTableExists(): Promise<void> {
   if (tasksInitialized) return;
-  await ensureTableExists();
-  const pool = getPool();
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS tasks (
-      id TEXT PRIMARY KEY,
-      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-      user_id UUID,
-      title TEXT NOT NULL,
-      heading TEXT DEFAULT '',
-      description TEXT DEFAULT '',
-      comments TEXT DEFAULT '',
-      stage TEXT NOT NULL DEFAULT 'inprogress' CHECK (stage IN ('inprogress', 'completed', 'stopped')),
-      start_date TEXT DEFAULT '',
-      end_date TEXT DEFAULT '',
-      created_at BIGINT NOT NULL
-    );
-    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS heading TEXT DEFAULT '';
-    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS description TEXT DEFAULT '';
-    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS comments TEXT DEFAULT '';
-    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS start_date TEXT DEFAULT '';
-    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS end_date TEXT DEFAULT '';
-    CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks (project_id);
-    CREATE INDEX IF NOT EXISTS idx_tasks_user_id ON tasks (user_id);
-    CREATE INDEX IF NOT EXISTS idx_tasks_stage ON tasks (stage);
-    CREATE OR REPLACE VIEW task AS SELECT * FROM tasks;
-  `);
-  tasksInitialized = true;
+  try {
+    await ensureTableExists();
+    const pool = getPool();
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS tasks (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        user_id UUID,
+        title TEXT NOT NULL,
+        heading TEXT DEFAULT '',
+        description TEXT DEFAULT '',
+        comments TEXT DEFAULT '',
+        stage TEXT NOT NULL DEFAULT 'inprogress' CHECK (stage IN ('inprogress', 'completed', 'stopped')),
+        start_date TEXT DEFAULT '',
+        end_date TEXT DEFAULT '',
+        created_at BIGINT NOT NULL
+      );
+      ALTER TABLE tasks ADD COLUMN IF NOT EXISTS heading TEXT DEFAULT '';
+      ALTER TABLE tasks ADD COLUMN IF NOT EXISTS description TEXT DEFAULT '';
+      ALTER TABLE tasks ADD COLUMN IF NOT EXISTS comments TEXT DEFAULT '';
+      ALTER TABLE tasks ADD COLUMN IF NOT EXISTS start_date TEXT DEFAULT '';
+      ALTER TABLE tasks ADD COLUMN IF NOT EXISTS end_date TEXT DEFAULT '';
+      CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks (project_id);
+      CREATE INDEX IF NOT EXISTS idx_tasks_user_id ON tasks (user_id);
+      CREATE INDEX IF NOT EXISTS idx_tasks_stage ON tasks (stage);
+      CREATE OR REPLACE VIEW task AS SELECT * FROM tasks;
+    `);
+    tasksInitialized = true;
+  } catch (err) {
+    console.warn("ensureTasksTableExists warning (continuing):", err);
+    tasksInitialized = true;
+  }
 }
 
 export async function getTasksByProject(
   projectId: string,
-  userId: string
+  userId?: string | null
 ): Promise<TaskItem[]> {
+  if (!projectId) return [];
   await ensureTasksTableExists();
   await ensureInvitationsAndMembersTablesExist();
 
@@ -611,19 +623,95 @@ export async function getTasksByProject(
     [projectId]
   );
 
-  return rows.map((r) => ({
-    id: r.id,
-    projectId: r.project_id,
-    userId: r.user_id || userId,
-    title: r.heading || r.title,
-    heading: r.heading || r.title,
-    description: r.description || "",
-    comments: r.comments || "",
-    stage: r.stage,
-    startDate: r.start_date || "",
-    endDate: r.end_date || "",
-    createdAt: Number(r.created_at) || Date.now(),
-  }));
+  if (rows.length > 0) {
+    return rows.map((r) => ({
+      id: r.id,
+      projectId: r.project_id,
+      userId: r.user_id || userId,
+      title: r.heading || r.title,
+      heading: r.heading || r.title,
+      description: r.description || "",
+      comments: r.comments || "",
+      stage: r.stage,
+      startDate: r.start_date || "",
+      endDate: r.end_date || "",
+      createdAt: Number(r.created_at) || Date.now(),
+    }));
+  }
+
+  // Fallback to legacy projects.tasks column if tasks table is empty
+  const { rows: projRows } = await pool.query<{ tasks: string | null }>(
+    "SELECT tasks FROM projects WHERE id = $1 LIMIT 1",
+    [projectId]
+  );
+
+  if (projRows.length > 0 && projRows[0].tasks && projRows[0].tasks.trim()) {
+    const rawText = projRows[0].tasks.trim();
+    const lines = rawText.split("\n");
+    const items: TaskItem[] = [];
+    let currentStage: TaskStage = "inprogress";
+
+    for (let i = 0; i < lines.length; i++) {
+      const trimmedLine = lines[i].trim();
+      if (!trimmedLine) continue;
+
+      if (/^#+\s*in\s*progress/i.test(trimmedLine)) {
+        currentStage = "inprogress";
+        continue;
+      }
+      if (/^#+\s*completed/i.test(trimmedLine)) {
+        currentStage = "completed";
+        continue;
+      }
+      if (/^#+\s*stopped/i.test(trimmedLine)) {
+        currentStage = "stopped";
+        continue;
+      }
+
+      let taskStage = currentStage;
+      let heading = trimmedLine;
+      let isTask = false;
+
+      if (/^[-*]\s*\[x\]/i.test(trimmedLine)) {
+        taskStage = "completed";
+        heading = trimmedLine.replace(/^[-*]\s*\[x\]\s*/i, "").trim();
+        isTask = true;
+      } else if (/^[-*]\s*\[-\]/i.test(trimmedLine) || /\[stopped\]/i.test(trimmedLine)) {
+        taskStage = "stopped";
+        heading = trimmedLine.replace(/^[-*]\s*\[-\]\s*/i, "").replace(/\[stopped\]/gi, "").trim();
+        isTask = true;
+      } else if (/^[-*]\s*\[\s*\]/i.test(trimmedLine)) {
+        taskStage = currentStage;
+        heading = trimmedLine.replace(/^[-*]\s*\[\s*\]\s*/i, "").trim();
+        isTask = true;
+      } else if (/^[-*]\s+/.test(trimmedLine)) {
+        heading = trimmedLine.replace(/^[-*]\s+/, "").trim();
+        isTask = true;
+      } else if (!trimmedLine.startsWith("#") && !trimmedLine.startsWith(">") && !trimmedLine.startsWith("[")) {
+        isTask = true;
+      }
+
+      if (isTask && heading) {
+        items.push({
+          id: `task-legacy-${i}-${projectId}`,
+          projectId,
+          userId,
+          title: heading,
+          heading: heading,
+          description: "",
+          comments: "[]",
+          stage: taskStage,
+          startDate: "",
+          endDate: "",
+          createdAt: Date.now() - (lines.length - i) * 60000,
+        });
+      }
+    }
+
+    return items;
+  }
+
+  return [];
 }
 
 export async function saveTask(
@@ -1837,41 +1925,59 @@ export async function deletePrompt(id: string, userId: string): Promise<void> {
 // ==========================================
 export async function ensureNotificationsTableExists(): Promise<void> {
   if (notificationsInitialized) return;
-  await ensureUsersTableExists();
-  await ensureTableExists();
-  await ensureInvitationsAndMembersTablesExist();
-  const pool = getPool();
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS notifications (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-      task_id TEXT,
-      actor_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      type TEXT NOT NULL DEFAULT 'task_created',
-      title TEXT NOT NULL DEFAULT 'New Task Created',
-      message TEXT NOT NULL,
-      is_read BOOLEAN NOT NULL DEFAULT false,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-    CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
-    CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_notifications_project_id ON notifications(project_id);
-    CREATE INDEX IF NOT EXISTS idx_notifications_user_unread ON notifications(user_id, is_read);
-  `);
-  notificationsInitialized = true;
+  try {
+    await ensureUsersTableExists();
+    await ensureTableExists();
+    await ensureInvitationsAndMembersTablesExist();
+    const pool = getPool();
+    await pool.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS push_token TEXT;
+      CREATE TABLE IF NOT EXISTS notifications (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        task_id TEXT,
+        actor_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        type TEXT NOT NULL DEFAULT 'task_created',
+        title TEXT NOT NULL DEFAULT 'New Task Created',
+        message TEXT NOT NULL,
+        is_read BOOLEAN NOT NULL DEFAULT false,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
+      CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_notifications_project_id ON notifications(project_id);
+      CREATE INDEX IF NOT EXISTS idx_notifications_user_unread ON notifications(user_id, is_read);
+    `);
+    notificationsInitialized = true;
+  } catch (err) {
+    console.warn("ensureNotificationsTableExists warning (continuing):", err);
+    notificationsInitialized = true;
+  }
 }
 
-export async function notifyProjectMembersOnTaskCreated({
+export async function saveUserPushToken(userId: string, pushToken: string): Promise<void> {
+  await ensureNotificationsTableExists();
+  const pool = getPool();
+  await pool.query("UPDATE users SET push_token = $1 WHERE id = $2", [pushToken, userId]);
+}
+
+export async function notifyProjectMembers({
   projectId,
   taskId,
   taskHeading,
   actorUserId,
+  type,
+  title,
+  message,
 }: {
   projectId: string;
-  taskId: string;
+  taskId?: string;
   taskHeading: string;
   actorUserId: string;
+  type: string;
+  title: string;
+  message: string;
 }): Promise<void> {
   await ensureNotificationsTableExists();
   const pool = getPool();
@@ -1885,7 +1991,7 @@ export async function notifyProjectMembersOnTaskCreated({
   const project = projRows[0];
   const projectName = project.name || "Untitled Project";
 
-  // 2. Fetch actor info (creator of task)
+  // 2. Fetch actor info (user performing the action)
   const { rows: actorRows } = await pool.query<{ username: string; full_name: string | null }>(
     "SELECT username, full_name FROM users WHERE id = $1 LIMIT 1",
     [actorUserId]
@@ -1894,7 +2000,7 @@ export async function notifyProjectMembersOnTaskCreated({
     ? (actorRows[0].full_name || actorRows[0].username || "A collaborator")
     : "A collaborator";
 
-  // 3. Find all member user IDs in this project only
+  // 3. Find all member user IDs in this project only (excluding the actor)
   const recipientIds = new Set<string>();
 
   // If project owner is another user, add them
@@ -1913,19 +2019,70 @@ export async function notifyProjectMembersOnTaskCreated({
     }
   }
 
-  // If no other members on this project, no notification needs to be sent
   if (recipientIds.size === 0) return;
 
-  const title = "New Task Created";
-  const message = `${actorName} created task "${taskHeading}"`;
+  const finalMessage = message.includes(actorName) ? message : `${actorName} ${message}`;
 
   for (const recipientId of recipientIds) {
     await pool.query(
       `INSERT INTO notifications (user_id, project_id, task_id, actor_id, type, title, message, is_read, created_at)
-       VALUES ($1, $2, $3, $4, 'task_created', $5, $6, false, NOW())`,
-      [recipientId, projectId, taskId, actorUserId, title, message]
+       VALUES ($1, $2, $3, $4, $5, $6, $7, false, NOW())`,
+      [recipientId, projectId, taskId || null, actorUserId, type, title, finalMessage]
     );
   }
+
+  // 4. Send Mobile Push Notifications via Expo Push Service
+  try {
+    const recipientArray = Array.from(recipientIds);
+    const { rows: tokenRows } = await pool.query<{ push_token: string | null }>(
+      `SELECT push_token FROM users WHERE id = ANY($1::uuid[]) AND push_token IS NOT NULL AND push_token != ''`,
+      [recipientArray]
+    );
+
+    const pushTokens = tokenRows.map((r) => r.push_token).filter(Boolean) as string[];
+    if (pushTokens.length > 0) {
+      const pushPayloads = pushTokens.map((to) => ({
+        to,
+        sound: "default",
+        title: `${projectName}: ${title}`,
+        body: finalMessage,
+        data: { projectId, taskId, type },
+      }));
+
+      await fetch("https://exp.host/--/api/v2/push/send", {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(pushPayloads),
+      });
+    }
+  } catch (pushErr) {
+    console.error("Expo push notification delivery error (continuing):", pushErr);
+  }
+}
+
+export async function notifyProjectMembersOnTaskCreated({
+  projectId,
+  taskId,
+  taskHeading,
+  actorUserId,
+}: {
+  projectId: string;
+  taskId: string;
+  taskHeading: string;
+  actorUserId: string;
+}): Promise<void> {
+  await notifyProjectMembers({
+    projectId,
+    taskId,
+    taskHeading,
+    actorUserId,
+    type: "task_created",
+    title: "New Task Created",
+    message: `created task "${taskHeading}"`,
+  });
 }
 
 export async function getNotificationsByUser(userId: string): Promise<TaskNotification[]> {
