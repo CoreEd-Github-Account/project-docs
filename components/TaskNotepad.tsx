@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import type { Project, TaskItem, TaskStage, TaskComment, TaskSubComment, ProjectRole, TaskMessage } from "@/lib/types";
+import type { Project, TaskItem, TaskStage, TaskComment, TaskSubComment, ProjectRole, TaskMessage, TaskAttachment } from "@/lib/types";
 
 interface TaskNotepadProps {
   project: Project;
@@ -90,6 +90,14 @@ export function formatFullDateTime(timestamp: number): string {
     minute: "2-digit",
     hour12: true,
   });
+}
+
+// Helper: format file size in B, KB, or MB
+export function formatFileSize(bytes?: number): string {
+  if (!bytes || isNaN(bytes)) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 // Helper: parse comments from JSON array or legacy string with date/time preservation
@@ -482,6 +490,13 @@ export function TaskNotepad({
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
+  // Form Attachments state (for Add / Edit Task Modal)
+  const [formAttachments, setFormAttachments] = useState<TaskAttachment[]>([]);
+  const [isUploadingFormAttachment, setIsUploadingFormAttachment] = useState(false);
+  const [formAttachmentError, setFormAttachmentError] = useState<string | null>(null);
+  const [isFormDraggingOver, setIsFormDraggingOver] = useState(false);
+  const formAttachmentFileInputRef = useRef<HTMLInputElement | null>(null);
+
   // Quick Inline Comment draft state for task cards: map of taskId -> draft comment text
   const [inlineComments, setInlineComments] = useState<Record<string, string>>({});
   const [savingCommentTaskId, setSavingCommentTaskId] = useState<string | null>(null);
@@ -495,6 +510,85 @@ export function TaskNotepad({
   const [activeDetailTaskId, setActiveDetailTaskId] = useState<string | null>(null);
   const [drawerNewComment, setDrawerNewComment] = useState("");
   const [isAddingDrawerComment, setIsAddingDrawerComment] = useState(false);
+  const [isDrawerCommentFormOpen, setIsDrawerCommentFormOpen] = useState(false);
+
+  // Task Workspace Draggable Resizer Split State
+  const [drawerSplitRatio, setDrawerSplitRatio] = useState<number>(50);
+  const [isDraggingSplitter, setIsDraggingSplitter] = useState(false);
+  const splitContainerRef = useRef<HTMLDivElement | null>(null);
+
+  // Initialize split ratio from localStorage on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("task_workspace_split_ratio");
+      if (saved) {
+        const val = parseFloat(saved);
+        if (!isNaN(val) && val >= 22 && val <= 78) {
+          setDrawerSplitRatio(val);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const handleSplitterMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDraggingSplitter(true);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!splitContainerRef.current) return;
+      const rect = splitContainerRef.current.getBoundingClientRect();
+      if (rect.width <= 0) return;
+      const newRatio = ((moveEvent.clientX - rect.left) / rect.width) * 100;
+      const clamped = Math.min(Math.max(newRatio, 22), 78);
+      setDrawerSplitRatio(clamped);
+      try {
+        localStorage.setItem("task_workspace_split_ratio", String(Math.round(clamped)));
+      } catch {
+        // ignore
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsDraggingSplitter(false);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+  };
+
+  const handleSplitterTouchStart = () => {
+    setIsDraggingSplitter(true);
+
+    const handleTouchMove = (moveEvent: TouchEvent) => {
+      if (!splitContainerRef.current || !moveEvent.touches[0]) return;
+      const rect = splitContainerRef.current.getBoundingClientRect();
+      if (rect.width <= 0) return;
+      const touchX = moveEvent.touches[0].clientX;
+      const newRatio = ((touchX - rect.left) / rect.width) * 100;
+      const clamped = Math.min(Math.max(newRatio, 22), 78);
+      setDrawerSplitRatio(clamped);
+    };
+
+    const handleTouchEnd = () => {
+      setIsDraggingSplitter(false);
+      window.removeEventListener("touchmove", handleTouchMove);
+      window.removeEventListener("touchend", handleTouchEnd);
+    };
+
+    window.addEventListener("touchmove", handleTouchMove);
+    window.addEventListener("touchend", handleTouchEnd);
+  };
+
+  // Image lightbox preview state
+  const [lightboxAttachment, setLightboxAttachment] = useState<TaskAttachment | null>(null);
 
   // Project Chats (task-specific live sync) state
   const [taskMessages, setTaskMessages] = useState<TaskMessage[]>([]);
@@ -565,6 +659,12 @@ export function TaskNotepad({
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [activeDetailTaskId]);
+
+  // Reset drawer comment form state when opening/closing task drawer
+  useEffect(() => {
+    setIsDrawerCommentFormOpen(false);
+    setDrawerNewComment("");
   }, [activeDetailTaskId]);
 
   // Fetch task-specific chat messages
@@ -966,6 +1066,68 @@ export function TaskNotepad({
     }
   };
 
+
+
+  // Upload attachment for the Add/Edit form
+  const handleUploadFormAttachment = async (file: File) => {
+    if (isReadOnly || !file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setFormAttachmentError("Only image files (JPEG, PNG, WebP, GIF, SVG) are supported.");
+      return;
+    }
+
+    if (file.size > 15 * 1024 * 1024) {
+      setFormAttachmentError("File size exceeds 15MB limit.");
+      return;
+    }
+
+    setIsUploadingFormAttachment(true);
+    setFormAttachmentError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("projectId", project.id);
+      if (editingTaskId) {
+        formData.append("taskId", editingTaskId);
+      }
+
+      const res = await fetch("/api/tasks/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to upload image");
+      }
+
+      setFormAttachments((prev) => [...prev, data.attachment]);
+    } catch (err: any) {
+      console.error("Failed to upload image for form:", err);
+      setFormAttachmentError(err?.message || "Failed to upload image. Please try again.");
+    } finally {
+      setIsUploadingFormAttachment(false);
+      if (formAttachmentFileInputRef.current) {
+        formAttachmentFileInputRef.current.value = "";
+      }
+    }
+  };
+
+  // Remove attachment from form
+  const handleRemoveFormAttachment = async (fileId: string) => {
+    setFormAttachments((prev) => prev.filter((a) => a.fileId !== fileId));
+    try {
+      await fetch(
+        `/api/tasks/upload?fileId=${encodeURIComponent(fileId)}&projectId=${encodeURIComponent(project.id)}`,
+        { method: "DELETE" }
+      );
+    } catch (err) {
+      console.warn("Background file delete warning:", err);
+    }
+  };
+
   // Add a new folder to current project
   const handleAddFolder = async (folderName: string) => {
     const cleanName = folderName.trim();
@@ -1143,6 +1305,8 @@ export function TaskNotepad({
     setFormNewComment("");
     setFormStartDate("");
     setFormEndDate("");
+    setFormAttachments([]);
+    setFormAttachmentError(null);
     setFormError(null);
     setIsFormOpen(true);
   };
@@ -1162,6 +1326,8 @@ export function TaskNotepad({
     setFormNewComment("");
     setFormStartDate(task.startDate || "");
     setFormEndDate(task.endDate || "");
+    setFormAttachments(task.attachments || []);
+    setFormAttachmentError(null);
     setFormError(null);
     setIsFormOpen(true);
   };
@@ -1215,6 +1381,7 @@ export function TaskNotepad({
           endDate: formEndDate.trim(),
           createdAt: Date.now(),
           folder: formFolder.trim(),
+          attachments: formAttachments,
         };
 
         // 1. Optimistic UI update
@@ -1239,6 +1406,7 @@ export function TaskNotepad({
             endDate: newTask.endDate,
             createdAt: newTask.createdAt,
             folder: newTask.folder,
+            attachments: formAttachments,
           }),
         });
 
@@ -1268,6 +1436,7 @@ export function TaskNotepad({
           endDate: formEndDate.trim(),
           createdAt: existingTask?.createdAt || Date.now(),
           folder: formFolder.trim(),
+          attachments: formAttachments,
         };
 
         // 1. Optimistic UI update
@@ -1293,6 +1462,7 @@ export function TaskNotepad({
             endDate: updatedTask.endDate,
             createdAt: updatedTask.createdAt,
             folder: updatedTask.folder,
+            attachments: formAttachments,
           }),
         });
 
@@ -1570,6 +1740,19 @@ export function TaskNotepad({
                 title={`Folder: ${task.folder}. Click to filter`}
               >
                 📁 {task.folder}
+              </span>
+            )}
+            {task.attachments && task.attachments.length > 0 && (
+              <span
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveDetailTaskId(task.id);
+                }}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-purple-950/70 border border-purple-500/30 text-purple-300 hover:bg-purple-900/80 cursor-pointer transition shrink-0"
+                title={`${task.attachments.length} image attachment(s). Click to view.`}
+              >
+                <span>🖼️</span>
+                <span>{task.attachments.length}</span>
               </span>
             )}
           </div>
@@ -2382,7 +2565,25 @@ export function TaskNotepad({
             </div>
 
             {/* Modal Body: Form */}
-            <form onSubmit={handleFormSubmit} className="p-6 space-y-4 overflow-y-auto flex-1">
+            <form
+              onSubmit={handleFormSubmit}
+              onPaste={(e) => {
+                if (isReadOnly) return;
+                const items = e.clipboardData?.items;
+                if (!items) return;
+                for (let i = 0; i < items.length; i++) {
+                  if (items[i].type.startsWith("image/")) {
+                    const file = items[i].getAsFile();
+                    if (file) {
+                      e.preventDefault();
+                      handleUploadFormAttachment(file);
+                      break;
+                    }
+                  }
+                }
+              }}
+              className="p-6 space-y-4 overflow-y-auto flex-1"
+            >
               {formError && (
                 <div className="p-3 rounded-lg bg-rose-950/50 border border-rose-500/40 text-rose-300 text-xs flex items-center gap-2">
                   <span>⚠</span>
@@ -2405,6 +2606,131 @@ export function TaskNotepad({
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition"
                   required
                 />
+              </div>
+
+              {/* IMAGES & ATTACHMENTS (IMAGEKIT.IO) */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-300 flex items-center gap-2">
+                    {/* <span className="text-sm">🖼️</span> */}
+                    <span>Images & Attachments</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-950/80 text-purple-300 font-semibold border border-purple-500/30">
+                      {formAttachments.length}
+                    </span>
+                    {/* <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-mono border border-slate-700/60 hidden sm:inline-block">
+                      ImageKit CDN
+                    </span> */}
+                  </label>
+                  <span className="text-[11px] text-slate-500 font-normal">Optional</span>
+                </div>
+
+                {/* Upload Trigger Input */}
+                <input
+                  type="file"
+                  ref={formAttachmentFileInputRef}
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      handleUploadFormAttachment(file);
+                    }
+                  }}
+                />
+
+                {/* Drag and Drop / Browse Card */}
+                <div
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsFormDraggingOver(true);
+                  }}
+                  onDragLeave={() => setIsFormDraggingOver(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsFormDraggingOver(false);
+                    const file = e.dataTransfer.files?.[0];
+                    if (file) {
+                      handleUploadFormAttachment(file);
+                    }
+                  }}
+                  onClick={() => formAttachmentFileInputRef.current?.click()}
+                  className={`p-3.5 rounded-xl border border-dashed transition text-center cursor-pointer select-none ${
+                    isFormDraggingOver
+                      ? "border-purple-400 bg-purple-950/40 text-purple-200"
+                      : "border-slate-800 hover:border-slate-700 bg-slate-950 text-slate-400 hover:text-slate-300"
+                  }`}
+                >
+                  <div className="flex flex-col items-center justify-center gap-1">
+                    {isUploadingFormAttachment ? (
+                      <div className="flex items-center gap-2 text-purple-300 py-1">
+                        <span className="w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
+                        <span className="text-xs font-medium">Uploading to ImageKit CDN...</span>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-center gap-1.5 text-xs font-medium text-slate-300">
+                          <svg className="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          <span><span className="text-purple-400 hover:underline">Click to upload image</span> or drag here</span>
+                        </div>
+                        <span className="text-[10px] text-slate-500">
+                          PNG, JPG, WebP, GIF, SVG (up to 15MB) • Or press <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 font-mono text-[9px]">Ctrl+V</kbd> to paste screenshot
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Form Attachment Error */}
+                {formAttachmentError && (
+                  <div className="p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-xs text-rose-300 flex items-center justify-between gap-2">
+                    <span>⚠️ {formAttachmentError}</span>
+                    <button
+                      type="button"
+                      onClick={() => setFormAttachmentError(null)}
+                      className="text-rose-400 hover:text-white"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
+
+                {/* Attached Images Grid in Form */}
+                {formAttachments.length > 0 && (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-1">
+                    {formAttachments.map((att) => (
+                      <div
+                        key={att.fileId}
+                        className="group/formimg relative rounded-xl overflow-hidden bg-slate-900 border border-slate-800 hover:border-purple-500/50 transition flex flex-col"
+                      >
+                        <div
+                          onClick={() => setLightboxAttachment(att)}
+                          className="relative aspect-video w-full bg-slate-950 overflow-hidden cursor-zoom-in"
+                        >
+                          <img
+                            src={att.thumbnailUrl || att.url}
+                            alt={att.name}
+                            className="w-full h-full object-cover transition-transform group-hover/formimg:scale-105"
+                          />
+                        </div>
+                        <div className="p-2 bg-slate-950 flex items-center justify-between gap-1 text-[11px]">
+                          <span className="truncate text-slate-300 flex-1" title={att.name}>
+                            {att.name}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveFormAttachment(att.fileId)}
+                            className="text-slate-500 hover:text-rose-400 p-0.5 rounded cursor-pointer transition"
+                            title="Remove image"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* 2. DESCRIPTION */}
@@ -3016,11 +3342,15 @@ export function TaskNotepad({
             </div>
 
             {/* Dual Window Container: Left = Task Details & Comments, Right = Project Chats */}
-            <div className="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-0">
+            <div
+              ref={splitContainerRef}
+              style={{ "--left-panel-width": `${drawerSplitRatio}%` } as React.CSSProperties}
+              className="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-0 relative"
+            >
               {/* ========================================================================= */}
               {/* LEFT WINDOW: Task Details & Comments Discussion                           */}
               {/* ========================================================================= */}
-              <div className="w-full lg:w-1/2 flex flex-col h-full overflow-hidden border-b lg:border-b-0 lg:border-r border-slate-800 bg-slate-900">
+              <div className="w-full lg:w-[var(--left-panel-width)] lg:shrink-0 flex flex-col h-full overflow-hidden border-b lg:border-b-0 border-slate-800 bg-slate-900">
                 {/* Left Window Header */}
                 <div className="px-5 py-3 border-b border-slate-800 bg-slate-950/70 flex items-center justify-between gap-3 shrink-0">
                   <div className="flex items-center gap-2.5 min-w-0">
@@ -3087,93 +3417,61 @@ export function TaskNotepad({
 
                 {/* Left Window Body (Scrollable) */}
                 <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-6">
-                  {/* Task Title */}
-                  <div>
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-                        Task Title
-                      </span>
-                      {activeDetailTask.stage === "completed" && (
-                        <span className="text-[10px] px-2 py-0.2 rounded-full bg-emerald-500/10 text-emerald-400 font-medium border border-emerald-500/30">
-                          ✓ Completed
+                  {/* Task Title & Metadata Badges */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between flex-wrap gap-2.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs sm:text-sm font-bold text-slate-200 uppercase tracking-wider">
+                          Task Title
                         </span>
-                      )}
-                    </div>
-                    <h2 className="text-xl font-bold text-white leading-snug">
-                      {activeDetailTask.heading || activeDetailTask.title}
-                    </h2>
-                  </div>
-
-                  {/* Task Folder / Category */}
-                  <div className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-950/60 border border-slate-800">
-                    <span className="text-xs font-semibold text-slate-400 flex items-center gap-1.5">
-                      <span>📁</span>
-                      <span>Folder:</span>
-                    </span>
-                    <div className="relative flex-1">
-                      <select
-                        value={activeDetailTask.folder || ""}
-                        disabled={isReadOnly}
-                        onChange={(e) => {
-                          if (e.target.value === "__create_new__") {
-                            const name = prompt("Enter new folder name:");
-                            if (name && name.trim()) {
-                              handleAddFolder(name.trim());
-                              handleChangeTaskFolder(activeDetailTask.id, name.trim());
-                            }
-                          } else {
-                            handleChangeTaskFolder(activeDetailTask.id, e.target.value);
-                          }
-                        }}
-                        className={`w-full text-xs font-semibold px-3 py-1.5 rounded-lg border appearance-none pr-7 outline-none transition-colors ${
-                          activeDetailTask.folder
-                            ? "bg-blue-950/70 text-blue-300 border-blue-500/40"
-                            : "bg-slate-900 text-slate-400 border-slate-800"
-                        } ${isReadOnly ? "cursor-not-allowed opacity-80" : "cursor-pointer"}`}
-                      >
-                        <option value="" className="bg-slate-900 text-slate-400">
-                          📁 General (No Folder)
-                        </option>
-                        {folders.map((f) => (
-                          <option key={f} value={f} className="bg-slate-900 text-slate-100">
-                            📁 {f}
-                          </option>
-                        ))}
-                        {!isReadOnly && (
-                          <option value="__create_new__" className="bg-slate-900 text-blue-400 font-semibold">
-                            + Create New Folder...
-                          </option>
+                        {activeDetailTask.stage === "completed" && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 font-medium border border-emerald-500/30">
+                            ✓ Completed
+                          </span>
                         )}
-                      </select>
-                      <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-400">
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
                       </div>
-                    </div>
-                  </div>
 
-                  {/* Timeline & Metadata */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 rounded-xl bg-slate-950/60 border border-slate-800 text-xs">
-                    <div>
-                      <span className="text-slate-500 block mb-1">Timeline</span>
-                      <div className="flex items-center gap-2 text-slate-200 font-medium">
-                        <svg className="w-4 h-4 text-blue-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                        <span>
-                          {activeDetailTask.startDate || "No start date"} → {activeDetailTask.endDate || "No end date"}
+                      {/* Right-aligned Metadata Badges with Headings */}
+                      <div className="flex items-center flex-wrap gap-2">
+                        {/* Timeline Badge */}
+                        <span
+                          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900/90 border border-slate-800 text-xs sm:text-sm text-slate-300 shadow-sm"
+                          title="Task Timeline"
+                        >
+                          <svg className="w-4 h-4 text-blue-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2z" />
+                          </svg>
+                          <span className="text-slate-400 font-medium">Timeline:</span>
+                          <span className="font-semibold text-slate-100">
+                            {activeDetailTask.startDate || activeDetailTask.endDate
+                              ? `${activeDetailTask.startDate || "—"} → ${activeDetailTask.endDate || "—"}`
+                              : "No timeline"}
+                          </span>
+                        </span>
+
+                        {/* Created Date Badge */}
+                        <span
+                          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900/90 border border-slate-800 text-xs sm:text-sm text-slate-300 shadow-sm"
+                          title="Created Date"
+                        >
+                          <svg className="w-4 h-4 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <span className="text-slate-400 font-medium">Created:</span>
+                          <span className="font-semibold text-slate-100">
+                            {formatFullDateTime(Number(activeDetailTask.createdAt) || 0) || "Recently"}
+                          </span>
                         </span>
                       </div>
                     </div>
-                    <div>
-                      <span className="text-slate-500 block mb-1">Created Date</span>
-                      <div className="flex items-center gap-2 text-slate-300">
-                        <svg className="w-4 h-4 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <span>{formatFullDateTime(Number(activeDetailTask.createdAt) || 0) || "Recently"}</span>
-                      </div>
+
+                    {/* Task Title Content (Read-only container like Description) */}
+                    <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800/90 text-sm text-slate-200 font-semibold leading-relaxed whitespace-pre-wrap break-words">
+                      {activeDetailTask.heading || activeDetailTask.title ? (
+                        activeDetailTask.heading || activeDetailTask.title
+                      ) : (
+                        <span className="text-slate-500 italic font-normal">No title provided</span>
+                      )}
                     </div>
                   </div>
 
@@ -3186,89 +3484,200 @@ export function TaskNotepad({
                       {activeDetailTask.description ? (
                         activeDetailTask.description
                       ) : (
-                        <span className="text-slate-500 italic">No description provided for this task.</span>
+                        <span className="text-slate-500 italic">No description provided</span>
                       )}
                     </div>
                   </div>
 
-                  {/* Comments Section */}
-                  <div className="space-y-3 pt-2 border-t border-slate-800/80">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-sm font-bold text-white tracking-wide">
-                          Comments & Discussion
-                        </h3>
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-blue-400 font-semibold border border-slate-700">
-                          {parseComments(activeDetailTask.comments).length}
-                        </span>
+                  {/* Task Attachments & Images Section (View Only in Task Workspace) */}
+                  {activeDetailTask.attachments && activeDetailTask.attachments.length > 0 && (
+                    <div className="space-y-3 pt-3 border-t border-slate-800/80">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-sm font-bold text-white tracking-wide">
+                            Images & Attachments
+                          </h3>
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-purple-950/80 text-purple-300 font-semibold border border-purple-500/30">
+                            {activeDetailTask.attachments.length}
+                          </span>
+                        </div>
                       </div>
 
-                      {isReadOnly && (
-                        <span className="text-[11px] text-amber-400 flex items-center gap-1">
-                          <span>👁️</span> Read-only mode
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Add New Comment Box */}
-                    {canEdit ? (
-                      <form
-                        onSubmit={async (e) => {
-                          e.preventDefault();
-                          if (!drawerNewComment.trim() || isAddingDrawerComment) return;
-                          setIsAddingDrawerComment(true);
-                          await handleAddCommentToTask(activeDetailTask.id, drawerNewComment);
-                          setDrawerNewComment("");
-                          setIsAddingDrawerComment(false);
-                        }}
-                        className="space-y-2 bg-slate-950/70 p-3.5 rounded-xl border border-slate-800"
-                      >
-                        <textarea
-                          value={drawerNewComment}
-                          onChange={(e) => setDrawerNewComment(e.target.value)}
-                          placeholder="Write a comment or update for your team..."
-                          rows={2}
-                          className="w-full bg-slate-900 border border-slate-700/80 rounded-lg p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition resize-none"
-                        />
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] text-slate-500">
-                            Press Post Comment to save to database
-                          </span>
-                          <button
-                            type="submit"
-                            disabled={!drawerNewComment.trim() || isAddingDrawerComment}
-                            className="px-3.5 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded-lg transition shadow-sm cursor-pointer disabled:cursor-not-allowed flex items-center gap-1.5"
+                      {/* Image Gallery Grid (View Only) */}
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        {activeDetailTask.attachments.map((att) => (
+                          <div
+                            key={att.fileId}
+                            className="group/img relative rounded-xl overflow-hidden bg-slate-950 border border-slate-800 hover:border-purple-500/50 transition-all shadow-sm flex flex-col"
                           >
-                            {isAddingDrawerComment ? (
-                              <>
-                                <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                <span>Posting...</span>
-                              </>
-                            ) : (
-                              <>
-                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            {/* Thumbnail preview */}
+                            <div
+                              onClick={() => setLightboxAttachment(att)}
+                              className="relative aspect-video w-full bg-slate-900 overflow-hidden cursor-zoom-in flex items-center justify-center"
+                            >
+                              <img
+                                src={att.thumbnailUrl || att.url}
+                                alt={att.name}
+                                className="w-full h-full object-cover transition-transform duration-300 group-hover/img:scale-105"
+                                loading="lazy"
+                              />
+                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                <span className="p-1.5 rounded-lg bg-black/70 text-white text-xs font-medium flex items-center gap-1 shadow-md">
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7" />
+                                  </svg>
+                                  <span>Zoom</span>
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Card Footer: Name, Size & Open Link */}
+                            <div className="p-2.5 bg-slate-950 flex items-center justify-between gap-1.5 text-xs">
+                              <div className="min-w-0 flex-1">
+                                <p
+                                  title={att.name}
+                                  onClick={() => setLightboxAttachment(att)}
+                                  className="text-[11px] font-semibold text-slate-200 truncate hover:text-purple-300 cursor-pointer"
+                                >
+                                  {att.name}
+                                </p>
+                                <span className="text-[10px] text-slate-500 block">
+                                  {formatFileSize(att.size)}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center gap-1">
+                                <a
+                                  href={att.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  title="Open original high-res image in new tab"
+                                  className="p-1 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition"
+                                >
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                  </svg>
+                                </a>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Comments Section */}
+                  {(() => {
+                    const taskComments = parseComments(activeDetailTask.comments);
+                    const hasNoComments = taskComments.length === 0;
+
+                    return (
+                      <div className="space-y-3 pt-2 border-t border-slate-800/80">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-sm font-bold text-white tracking-wide">
+                              Comments & Discussion
+                            </h3>
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-blue-400 font-semibold border border-slate-700">
+                              {taskComments.length}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            {isReadOnly && (
+                              <span className="text-[11px] text-amber-400 flex items-center gap-1">
+                                <span>👁️</span> Read-only mode
+                              </span>
+                            )}
+
+                            {canEdit && hasNoComments && !isDrawerCommentFormOpen && (
+                              <button
+                                type="button"
+                                onClick={() => setIsDrawerCommentFormOpen(true)}
+                                className="px-3 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition shadow-sm cursor-pointer flex items-center gap-1.5"
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
                                 </svg>
-                                <span>Post Comment</span>
-                              </>
+                                <span>+ Post Comment</span>
+                              </button>
                             )}
-                          </button>
+                          </div>
                         </div>
-                      </form>
-                    ) : (
-                      <div className="p-3 rounded-lg bg-slate-950/40 border border-slate-800 text-xs text-slate-400 italic">
-                        You have read-only access to this project. You can read comments, but adding comments is restricted.
-                      </div>
-                    )}
 
-                    {/* Existing Comments List */}
-                    <div className="space-y-2.5 pt-1">
-                      {parseComments(activeDetailTask.comments).length === 0 ? (
-                        <div className="py-6 text-center text-xs text-slate-500 italic rounded-lg bg-slate-950/30 border border-dashed border-slate-800/80">
-                          No comments yet on this task.
-                        </div>
-                      ) : (
-                        parseComments(activeDetailTask.comments).map((comment) => {
+                        {/* Add New Comment Box (shown when comments exist, or when user clicks + Post Comment) */}
+                        {canEdit && (!hasNoComments || isDrawerCommentFormOpen) && (
+                          <form
+                            onSubmit={async (e) => {
+                              e.preventDefault();
+                              if (!drawerNewComment.trim() || isAddingDrawerComment) return;
+                              setIsAddingDrawerComment(true);
+                              await handleAddCommentToTask(activeDetailTask.id, drawerNewComment);
+                              setDrawerNewComment("");
+                              setIsAddingDrawerComment(false);
+                              setIsDrawerCommentFormOpen(false);
+                            }}
+                            className="space-y-2 bg-slate-950/70 p-3.5 rounded-xl border border-slate-800"
+                          >
+                            <textarea
+                              value={drawerNewComment}
+                              onChange={(e) => setDrawerNewComment(e.target.value)}
+                              placeholder="Write a comment or update for your team..."
+                              rows={2}
+                              autoFocus={hasNoComments && isDrawerCommentFormOpen}
+                              className="w-full bg-slate-900 border border-slate-700/80 rounded-lg p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition resize-none"
+                            />
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] text-slate-500">
+                                Press Post Comment to save to database
+                              </span>
+                              <div className="flex items-center gap-2">
+                                {hasNoComments && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setIsDrawerCommentFormOpen(false);
+                                      setDrawerNewComment("");
+                                    }}
+                                    className="px-2.5 py-1 text-xs text-slate-400 hover:text-white transition cursor-pointer"
+                                  >
+                                    Cancel
+                                  </button>
+                                )}
+                                <button
+                                  type="submit"
+                                  disabled={!drawerNewComment.trim() || isAddingDrawerComment}
+                                  className="px-3.5 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded-lg transition shadow-sm cursor-pointer disabled:cursor-not-allowed flex items-center gap-1.5"
+                                >
+                                  {isAddingDrawerComment ? (
+                                    <>
+                                      <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                      <span>Posting...</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                                      </svg>
+                                      <span>Post Comment</span>
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+                          </form>
+                        )}
+
+                        {isReadOnly && (
+                          <div className="p-3 rounded-lg bg-slate-950/40 border border-slate-800 text-xs text-slate-400 italic">
+                            You have read-only access to this project. You can read comments, but adding comments is restricted.
+                          </div>
+                        )}
+
+                        {/* Existing Comments List */}
+                        {!hasNoComments && (
+                          <div className="space-y-2.5 pt-1">
+                            {taskComments.map((comment) => {
                           const timeInfo = formatCommentBadge(comment.createdAt, comment.dateTime);
                           const subComments = comment.subComments || [];
                           const isReplying = replyingCommentId === comment.id;
@@ -3505,11 +3914,13 @@ export function TaskNotepad({
                                 </div>
                               )}
                             </div>
-                          );
-                        })
+                            );
+                          })}
+                        </div>
                       )}
                     </div>
-                  </div>
+                  );
+                })()}
                 </div>
 
                 {/* Left Window Footer */}
@@ -3519,10 +3930,35 @@ export function TaskNotepad({
                 </div>
               </div>
 
+              {/* Draggable Resizer Bar (Middle line to resize Task Details and Project Chats) */}
+              <div
+                onMouseDown={handleSplitterMouseDown}
+                onTouchStart={handleSplitterTouchStart}
+                onDoubleClick={() => {
+                  setDrawerSplitRatio(50);
+                  try {
+                    localStorage.setItem("task_workspace_split_ratio", "50");
+                  } catch {
+                    // ignore
+                  }
+                }}
+                className={`hidden lg:flex w-2.5 hover:w-2.5 relative z-30 cursor-col-resize items-center justify-center bg-slate-950 hover:bg-blue-600/70 border-x border-slate-800 transition-colors shrink-0 group select-none ${
+                  isDraggingSplitter ? "bg-blue-600 ring-2 ring-blue-500/40" : ""
+                }`}
+                title="Click and drag to resize windows • Double-click to reset (50/50)"
+              >
+                {/* Visual handle dots */}
+                <div className="flex flex-col items-center gap-1 opacity-50 group-hover:opacity-100 group-active:opacity-100 transition-opacity">
+                  <span className="w-1 h-1 rounded-full bg-slate-400 group-hover:bg-white transition-colors" />
+                  <span className="w-1 h-1 rounded-full bg-slate-400 group-hover:bg-white transition-colors" />
+                  <span className="w-1 h-1 rounded-full bg-slate-400 group-hover:bg-white transition-colors" />
+                </div>
+              </div>
+
               {/* ========================================================================= */}
               {/* RIGHT WINDOW: Project Chats (Task-Specific Live Sync)                     */}
               {/* ========================================================================= */}
-              <div className="w-full lg:w-1/2 flex flex-col h-full overflow-hidden bg-slate-950/80">
+              <div className="flex-1 w-full lg:w-auto flex flex-col h-full overflow-hidden bg-slate-950/80 min-w-0">
                 {/* Project Chats Header */}
                 <div className="px-5 py-3 border-b border-slate-800 bg-slate-950/90 flex items-center justify-between gap-3 shrink-0">
                   <div className="flex items-center gap-2.5 min-w-0">
@@ -3654,6 +4090,61 @@ export function TaskNotepad({
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* IMAGE LIGHTBOX MODAL */}
+      {lightboxAttachment && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in duration-200"
+          onClick={() => setLightboxAttachment(null)}
+        >
+          <div
+            className="relative max-w-5xl max-h-[90vh] w-full bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Lightbox Header */}
+            <div className="px-5 py-3 border-b border-slate-800 bg-slate-900/80 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className="text-sm font-semibold text-white truncate max-w-md">
+                  {lightboxAttachment.name}
+                </span>
+                <span className="text-xs text-slate-400">
+                  ({formatFileSize(lightboxAttachment.size)})
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <a
+                  href={lightboxAttachment.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 hover:text-white transition flex items-center gap-1.5"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                  <span>Open Full Size</span>
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setLightboxAttachment(null)}
+                  className="w-8 h-8 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 flex items-center justify-center transition cursor-pointer"
+                  title="Close (Esc)"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            {/* Lightbox Image Viewport */}
+            <div className="flex-1 overflow-auto p-4 flex items-center justify-center bg-black/50 min-h-[300px]">
+              <img
+                src={lightboxAttachment.url}
+                alt={lightboxAttachment.name}
+                className="max-h-[75vh] w-auto max-w-full object-contain rounded-lg shadow-lg"
+              />
             </div>
           </div>
         </div>

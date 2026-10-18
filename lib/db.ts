@@ -11,6 +11,7 @@ import type {
   TaskItem,
   TaskStage,
   TaskMessage,
+  TaskAttachment,
   SavedPrompt,
   ProjectInvitation,
   ProjectMember,
@@ -597,6 +598,7 @@ export async function ensureTasksTableExists(): Promise<void> {
       ALTER TABLE tasks ADD COLUMN IF NOT EXISTS start_date TEXT DEFAULT '';
       ALTER TABLE tasks ADD COLUMN IF NOT EXISTS end_date TEXT DEFAULT '';
       ALTER TABLE tasks ADD COLUMN IF NOT EXISTS folder TEXT DEFAULT '';
+      ALTER TABLE tasks ADD COLUMN IF NOT EXISTS attachments TEXT DEFAULT '[]';
       CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks (project_id);
       CREATE INDEX IF NOT EXISTS idx_tasks_user_id ON tasks (user_id);
       CREATE INDEX IF NOT EXISTS idx_tasks_stage ON tasks (stage);
@@ -607,6 +609,16 @@ export async function ensureTasksTableExists(): Promise<void> {
   } catch (err) {
     console.warn("ensureTasksTableExists warning (continuing):", err);
     tasksInitialized = true;
+  }
+}
+
+function safeParseAttachments(raw?: string | null): TaskAttachment[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
   }
 }
 
@@ -634,13 +646,14 @@ export async function getTasksByProject(
     heading: string | null;
     description: string | null;
     comments: string | null;
+    attachments: string | null;
     stage: TaskStage;
     start_date: string | null;
     end_date: string | null;
     created_at: string | number;
     folder: string | null;
   }>(
-    "SELECT id, project_id, user_id, title, COALESCE(NULLIF(heading, ''), title) as heading, description, comments, stage, start_date, end_date, created_at, COALESCE(folder, '') as folder FROM tasks WHERE project_id = $1 ORDER BY created_at ASC",
+    "SELECT id, project_id, user_id, title, COALESCE(NULLIF(heading, ''), title) as heading, description, comments, COALESCE(attachments, '[]') as attachments, stage, start_date, end_date, created_at, COALESCE(folder, '') as folder FROM tasks WHERE project_id = $1 ORDER BY created_at ASC",
     [projectId]
   );
 
@@ -653,6 +666,7 @@ export async function getTasksByProject(
       heading: r.heading || r.title,
       description: r.description || "",
       comments: r.comments || "",
+      attachments: safeParseAttachments(r.attachments),
       stage: r.stage,
       startDate: r.start_date || "",
       endDate: r.end_date || "",
@@ -751,11 +765,12 @@ export async function saveTask(
   const startDateText = task.startDate || "";
   const endDateText = task.endDate || "";
   const folderText = task.folder || "";
+  const attachmentsJson = JSON.stringify(task.attachments || []);
 
   await pool.query(
     `
-    INSERT INTO tasks (id, project_id, user_id, title, heading, description, comments, stage, start_date, end_date, created_at, folder)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+    INSERT INTO tasks (id, project_id, user_id, title, heading, description, comments, stage, start_date, end_date, created_at, folder, attachments)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
     ON CONFLICT (id) DO UPDATE SET
       title = EXCLUDED.title,
       heading = EXCLUDED.heading,
@@ -765,6 +780,7 @@ export async function saveTask(
       start_date = EXCLUDED.start_date,
       end_date = EXCLUDED.end_date,
       folder = EXCLUDED.folder,
+      attachments = EXCLUDED.attachments,
       project_id = EXCLUDED.project_id,
       user_id = COALESCE(tasks.user_id, EXCLUDED.user_id)
   `,
@@ -781,6 +797,7 @@ export async function saveTask(
       endDateText,
       createdAt,
       folderText,
+      attachmentsJson,
     ]
   );
 }

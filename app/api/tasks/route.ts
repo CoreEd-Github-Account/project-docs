@@ -111,6 +111,7 @@ export async function POST(request: Request) {
       endDate: String(endDate || end_date || "").trim(),
       createdAt: Number(body.createdAt) || Date.now(),
       folder: folder !== undefined ? String(folder).trim() : "",
+      attachments: Array.isArray(body.attachments) ? body.attachments : [],
     };
 
     await saveTask(newTask, projectId, auth.user.id);
@@ -188,18 +189,20 @@ export async function PUT(request: Request) {
       title: string;
       description: string;
       comments: string;
+      attachments: string | null;
       start_date: string;
       end_date: string;
       created_at: string | number;
       stage: TaskStage;
       folder: string | null;
     }>(
-      "SELECT heading, title, description, comments, start_date, end_date, created_at, stage, folder FROM tasks WHERE id = $1 LIMIT 1",
+      "SELECT heading, title, description, comments, COALESCE(attachments, '[]') as attachments, start_date, end_date, created_at, stage, folder FROM tasks WHERE id = $1 LIMIT 1",
       [id]
     );
 
     let previousStage: TaskStage | undefined = undefined;
     let previousComments: string | undefined = undefined;
+    let taskAttachments = Array.isArray(body.attachments) ? body.attachments : undefined;
 
     if (existingRows.length > 0) {
       previousStage = existingRows[0].stage;
@@ -211,6 +214,13 @@ export async function PUT(request: Request) {
       if (!taskEndDate) taskEndDate = existingRows[0].end_date || "";
       if (!taskCreatedAt) taskCreatedAt = Number(existingRows[0].created_at) || Date.now();
       if (taskFolder === undefined) taskFolder = existingRows[0].folder || "";
+      if (taskAttachments === undefined) {
+        try {
+          taskAttachments = JSON.parse(existingRows[0].attachments || "[]");
+        } catch {
+          taskAttachments = [];
+        }
+      }
     }
 
     if (!taskHeading) {
@@ -246,6 +256,7 @@ export async function PUT(request: Request) {
       heading: taskHeading,
       description: taskDescription || "",
       comments: taskComments || "",
+      attachments: Array.isArray(taskAttachments) ? taskAttachments : [],
       stage: validStage,
       startDate: String(taskStartDate || "").trim(),
       endDate: String(taskEndDate || "").trim(),

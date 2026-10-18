@@ -23,6 +23,16 @@ export interface TaskComment {
   subComments?: TaskSubComment[];
 }
 
+export interface TaskAttachment {
+  fileId: string;
+  name: string;
+  url: string;
+  thumbnailUrl?: string;
+  size?: number;
+  filePath?: string;
+  createdAt: number;
+}
+
 export interface TaskItem {
   id: string;
   title: string;
@@ -30,6 +40,7 @@ export interface TaskItem {
   description?: string;
   stage: TaskStage;
   comments?: string;
+  attachments?: TaskAttachment[];
   startDate?: string;
   endDate?: string;
   createdAt?: number;
@@ -48,6 +59,7 @@ export interface TaskMessage {
   avatarUrl?: string;
   message: string;
   createdAt: string;
+  attachment?: TaskAttachment;
 }
 
 export type ProjectPermissionLevel = "read" | "edit_no_delete" | "full";
