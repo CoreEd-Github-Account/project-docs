@@ -9,7 +9,7 @@ import {
 import type { ProjectPermissionLevel, ProjectViewTab } from "@/lib/types";
 
 const VALID_PERMISSIONS: ProjectPermissionLevel[] = ["read", "edit_no_delete", "full"];
-const ALL_TABS: ProjectViewTab[] = ["builder", "preview", "tasks"];
+const ALL_TABS: ProjectViewTab[] = ["builder", "preview", "bulk_opener", "documents", "tasks"];
 
 export async function GET(request: Request) {
   const auth = await getAuthenticatedUser();

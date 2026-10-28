@@ -12,6 +12,8 @@ import { Sidebar } from "@/components/Sidebar";
 import { TemplateEditor } from "@/components/TemplateEditor";
 import { LivePreview } from "@/components/LivePreview";
 import { TaskNotepad } from "@/components/TaskNotepad";
+import { ProjectDocuments } from "@/components/ProjectDocuments";
+import { BulkOpener } from "@/components/BulkOpener";
 import { LoginForm } from "@/components/LoginForm";
 import { ShareModal } from "@/components/ShareModal";
 import { InviteFriendModal } from "@/components/InviteFriendModal";
@@ -29,9 +31,7 @@ export default function ProjectTemplateBuilder() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<string>("");
-  const [activeTab, setActiveTab] = useState<
-    "builder" | "preview" | "tasks"
-  >("builder");
+  const [activeTab, setActiveTab] = useState<ProjectViewTab>("builder");
   const [searchQuery, setSearchQuery] = useState("");
   const [newHeading, setNewHeading] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -172,21 +172,23 @@ export default function ProjectTemplateBuilder() {
 
   const allowedViews: ProjectViewTab[] = activeProject
     ? isOwner
-      ? ["builder", "preview", "tasks"]
+      ? ["builder", "preview", "bulk_opener", "documents", "tasks"]
       : activeProject.allowedViews && activeProject.allowedViews.length > 0
       ? activeProject.allowedViews
-      : ["builder", "preview", "tasks"]
-    : ["builder", "preview", "tasks"];
+      : ["builder", "preview", "bulk_opener", "documents", "tasks"]
+    : ["builder", "preview", "bulk_opener", "documents", "tasks"];
 
   const canViewBuilder = isOwner || allowedViews.includes("builder");
   const canViewPreview = isOwner || allowedViews.includes("preview");
+  const canViewBulkOpener = isOwner || allowedViews.includes("bulk_opener");
+  const canViewDocuments = isOwner || allowedViews.includes("documents");
   const canViewTasks = isOwner || allowedViews.includes("tasks");
 
   // Dynamically auto-switch active tab if current tab is restricted for collaborator
   useEffect(() => {
     if (!activeProject || isOwner) return;
     if (!allowedViews.includes(activeTab)) {
-      const firstAllowed = (["builder", "preview", "tasks"] as const).find((t) =>
+      const firstAllowed = (["builder", "preview", "bulk_opener", "documents", "tasks"] as const).find((t) =>
         allowedViews.includes(t)
       );
       if (firstAllowed) {
@@ -706,6 +708,56 @@ export default function ProjectTemplateBuilder() {
                       <span>Live Preview</span>
                     </button>
                   )}
+                  {canViewBulkOpener && (
+                    <button
+                      onClick={() => setActiveTab("bulk_opener")}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold transition cursor-pointer ${
+                        activeTab === "bulk_opener"
+                          ? "bg-blue-600 text-white shadow-sm"
+                          : "text-slate-400 hover:text-white hover:bg-slate-800/80"
+                      }`}
+                    >
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                        />
+                      </svg>
+                      <span>Bulk Opener</span>
+                    </button>
+                  )}
+                  {canViewDocuments && (
+                    <button
+                      onClick={() => setActiveTab("documents")}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold transition cursor-pointer ${
+                        activeTab === "documents"
+                          ? "bg-blue-600 text-white shadow-sm"
+                          : "text-slate-400 hover:text-white hover:bg-slate-800/80"
+                      }`}
+                    >
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                        />
+                      </svg>
+                      <span>Documents</span>
+                    </button>
+                  )}
                   {canViewTasks && (
                     <button
                       onClick={() => setActiveTab("tasks")}
@@ -920,7 +972,23 @@ export default function ProjectTemplateBuilder() {
               projectName={activeProject.name}
             />
 
-            {/* VIEW 3: TASKS NOTEPAD */}
+            {/* VIEW 3: BULK OPENER */}
+            {activeTab === "bulk_opener" && canViewBulkOpener && (
+              <BulkOpener
+                project={activeProject}
+                userPermission={activeProject.currentUserPermission}
+              />
+            )}
+
+            {/* VIEW 4: DOCUMENTS */}
+            {activeTab === "documents" && canViewDocuments && (
+              <ProjectDocuments
+                project={activeProject}
+                userPermission={activeProject.currentUserPermission}
+              />
+            )}
+
+            {/* VIEW 5: TASKS NOTEPAD */}
             {activeTab === "tasks" && canViewTasks && (
               <TaskNotepad
                 project={activeProject}
@@ -936,6 +1004,8 @@ export default function ProjectTemplateBuilder() {
             {/* RESTRICTED ACCESS NOTICE */}
             {((activeTab === "builder" && !canViewBuilder) ||
               (activeTab === "preview" && !canViewPreview) ||
+              (activeTab === "bulk_opener" && !canViewBulkOpener) ||
+              (activeTab === "documents" && !canViewDocuments) ||
               (activeTab === "tasks" && !canViewTasks)) && (
               <div className="p-10 text-center bg-slate-900 border border-slate-800 rounded-2xl max-w-lg mx-auto space-y-3 my-8 shadow-xl">
                 <div className="w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 mx-auto text-xl">

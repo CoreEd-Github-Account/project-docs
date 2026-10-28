@@ -28,6 +28,8 @@ export function InviteFriendModal({
   const [friendAllowedViews, setFriendAllowedViews] = useState<ProjectViewTab[]>([
     "builder",
     "preview",
+    "bulk_opener",
+    "documents",
     "tasks",
   ]);
 
@@ -36,6 +38,8 @@ export function InviteFriendModal({
   const [publicAllowedViews, setPublicAllowedViews] = useState<ProjectViewTab[]>([
     "builder",
     "preview",
+    "bulk_opener",
+    "documents",
     "tasks",
   ]);
   const [publicExpiresInDays, setPublicExpiresInDays] = useState<number>(30);
@@ -602,10 +606,12 @@ export function InviteFriendModal({
                   <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300">
                     Visible Modules for Members
                   </label>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                     {[
                       { id: "builder" as ProjectViewTab, label: "Builder" },
                       { id: "preview" as ProjectViewTab, label: "Live Preview" },
+                      { id: "bulk_opener" as ProjectViewTab, label: "Bulk Opener" },
+                      { id: "documents" as ProjectViewTab, label: "Documents" },
                       { id: "tasks" as ProjectViewTab, label: "Tasks" },
                     ].map((tab) => (
                       <button
@@ -876,10 +882,12 @@ export function InviteFriendModal({
                   <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300">
                     Visible Modules for Friend
                   </label>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                     {[
                       { id: "builder" as ProjectViewTab, label: "Builder" },
                       { id: "preview" as ProjectViewTab, label: "Live Preview" },
+                      { id: "bulk_opener" as ProjectViewTab, label: "Bulk Opener" },
+                      { id: "documents" as ProjectViewTab, label: "Documents" },
                       { id: "tasks" as ProjectViewTab, label: "Tasks" },
                     ].map((tab) => (
                       <button

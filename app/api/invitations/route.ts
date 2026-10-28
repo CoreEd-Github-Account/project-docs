@@ -11,7 +11,7 @@ import type { ProjectPermissionLevel, ProjectViewTab } from "@/lib/types";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const VALID_PERMISSIONS: ProjectPermissionLevel[] = ["read", "edit_no_delete", "full"];
-const ALL_TABS: ProjectViewTab[] = ["builder", "preview", "tasks"];
+const ALL_TABS: ProjectViewTab[] = ["builder", "preview", "bulk_opener", "documents", "tasks"];
 
 export async function POST(request: Request) {
   const auth = await getAuthenticatedUser();
@@ -49,7 +49,7 @@ export async function POST(request: Request) {
     }
 
     // Parse and sanitize allowedViews
-    let validatedViews: ProjectViewTab[] = ["builder", "preview", "tasks"];
+    let validatedViews: ProjectViewTab[] = ["builder", "preview", "bulk_opener", "documents", "tasks"];
     if (Array.isArray(allowedViews) && allowedViews.length > 0) {
       const filtered = allowedViews.filter((v: any): v is ProjectViewTab =>
         ALL_TABS.includes(v)

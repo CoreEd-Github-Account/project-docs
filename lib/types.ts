@@ -98,7 +98,37 @@ export interface TaskMessage {
 
 export type ProjectPermissionLevel = "read" | "edit_no_delete" | "full";
 export type ProjectRole = "owner" | ProjectPermissionLevel;
-export type ProjectViewTab = "builder" | "preview" | "tasks";
+export type ProjectViewTab = "builder" | "preview" | "bulk_opener" | "documents" | "tasks";
+
+export interface ProjectBulkOpener {
+  id?: string;
+  projectId: string;
+  content: string;
+  updatedAt?: string;
+  createdAt?: string;
+}
+
+export type DocumentType = "markdown" | "text" | "image" | "file";
+
+export interface ProjectDocument {
+  id: string;
+  projectId: string;
+  userId: string;
+  name: string;
+  fileType: DocumentType;
+  mimeType?: string;
+  fileExtension?: string;
+  fileSize: number;
+  fileId?: string;
+  fileUrl?: string;
+  content?: string;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+  uploaderName?: string;
+  uploaderFullName?: string;
+  uploaderAvatar?: string;
+}
 
 export interface Project {
   id: string;
@@ -202,6 +232,25 @@ export interface SavedPrompt {
   heading: string;
   description: string;
   prompt: string;
+  createdAt: string;
+  updatedAt?: string;
+  userId?: string;
+}
+
+export type CommandCategory =
+  | "github"
+  | "npm"
+  | "linux"
+  | "docker"
+  | "database"
+  | "other";
+
+export interface SavedCommand {
+  id: string;
+  title?: string;
+  command: string;
+  category: CommandCategory | string;
+  isPinned?: boolean;
   createdAt: string;
   updatedAt?: string;
   userId?: string;

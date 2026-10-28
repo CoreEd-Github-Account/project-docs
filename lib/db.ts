@@ -21,6 +21,9 @@ import type {
   ProjectViewTab,
   TaskNotification,
   ProjectStatusStage,
+  ProjectDocument,
+  DocumentType,
+  SavedCommand,
 } from "./types";
 
 let poolInstance: Pool | null = null;
@@ -35,6 +38,9 @@ let settingsInitialized = false;
 let promptsInitialized = false;
 let invitationsInitialized = false;
 let notificationsInitialized = false;
+let documentsInitialized = false;
+let bulkOpenersInitialized = false;
+let commandsInitialized = false;
 
 function resolveConnectionString(raw: string): string {
   try {
@@ -526,7 +532,7 @@ export async function getAllProjects(userId: string): Promise<Project[]> {
       ? "owner"
       : row.permission_level || "read";
 
-    let allowedViews: ProjectViewTab[] = ["builder", "preview", "tasks"];
+    let allowedViews: ProjectViewTab[] = ["builder", "preview", "bulk_opener", "documents", "tasks"];
     if (!isOwner && row.allowed_views) {
       if (Array.isArray(row.allowed_views)) {
         allowedViews = row.allowed_views as ProjectViewTab[];
@@ -534,7 +540,7 @@ export async function getAllProjects(userId: string): Promise<Project[]> {
         try {
           allowedViews = JSON.parse(row.allowed_views);
         } catch {
-          allowedViews = ["builder", "preview", "tasks"];
+          allowedViews = ["builder", "preview", "bulk_opener", "documents", "tasks"];
         }
       }
     }
@@ -2283,6 +2289,548 @@ export async function clearAllNotifications(userId: string): Promise<void> {
     "DELETE FROM notifications WHERE user_id = $1",
     [userId]
   );
+}
+
+// ==========================================
+// PROJECT DOCUMENTS TABLE & RELATIONAL CRUD
+// ==========================================
+export async function ensureProjectDocumentsTableExists(): Promise<void> {
+  if (documentsInitialized) return;
+  try {
+    await ensureUsersTableExists();
+    await ensureTableExists();
+    const pool = getPool();
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS project_documents (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        project_id TEXT NOT NULL,
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        file_type TEXT NOT NULL,
+        mime_type TEXT,
+        file_extension TEXT,
+        file_size BIGINT DEFAULT 0,
+        file_id TEXT,
+        file_url TEXT,
+        content TEXT DEFAULT '',
+        description TEXT DEFAULT '',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      ALTER TABLE project_documents ADD COLUMN IF NOT EXISTS file_id TEXT;
+      CREATE INDEX IF NOT EXISTS idx_project_docs_project ON project_documents(project_id);
+      CREATE INDEX IF NOT EXISTS idx_project_docs_user ON project_documents(user_id);
+      CREATE INDEX IF NOT EXISTS idx_project_docs_updated ON project_documents(updated_at DESC);
+    `);
+    documentsInitialized = true;
+  } catch (err) {
+    console.warn("ensureProjectDocumentsTableExists warning (continuing):", err);
+    documentsInitialized = true;
+  }
+}
+
+export async function getProjectDocuments(projectId: string): Promise<ProjectDocument[]> {
+  await ensureProjectDocumentsTableExists();
+  const pool = getPool();
+  const { rows } = await pool.query<{
+    id: string;
+    project_id: string;
+    user_id: string;
+    name: string;
+    file_type: string;
+    mime_type: string | null;
+    file_extension: string | null;
+    file_size: string | number;
+    file_id: string | null;
+    file_url: string | null;
+    content: string | null;
+    description: string | null;
+    created_at: Date | string;
+    updated_at: Date | string;
+    username: string | null;
+    full_name: string | null;
+    avatar_url: string | null;
+  }>(
+    `SELECT d.id, d.project_id, d.user_id, d.name, d.file_type, d.mime_type,
+            d.file_extension, d.file_size, d.file_id, d.file_url, d.content, d.description,
+            d.created_at, d.updated_at,
+            u.username, u.full_name, u.avatar_url
+     FROM project_documents d
+     LEFT JOIN users u ON d.user_id = u.id
+     WHERE d.project_id = $1
+     ORDER BY d.updated_at DESC`,
+    [projectId]
+  );
+
+  return rows.map((r) => ({
+    id: r.id,
+    projectId: r.project_id,
+    userId: r.user_id,
+    name: r.name,
+    fileType: (r.file_type as DocumentType) || "file",
+    mimeType: r.mime_type || undefined,
+    fileExtension: r.file_extension || undefined,
+    fileSize: Number(r.file_size) || 0,
+    fileId: r.file_id || undefined,
+    fileUrl: r.file_url || undefined,
+    content: r.content || "",
+    description: r.description || "",
+    createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
+    updatedAt: r.updated_at instanceof Date ? r.updated_at.toISOString() : String(r.updated_at),
+    uploaderName: r.username || "Member",
+    uploaderFullName: r.full_name || undefined,
+    uploaderAvatar: r.avatar_url || undefined,
+  }));
+}
+
+export async function createProjectDocument(data: {
+  projectId: string;
+  userId: string;
+  name: string;
+  fileType: DocumentType;
+  mimeType?: string;
+  fileExtension?: string;
+  fileSize?: number;
+  fileId?: string;
+  fileUrl?: string;
+  content?: string;
+  description?: string;
+}): Promise<ProjectDocument> {
+  await ensureProjectDocumentsTableExists();
+  const pool = getPool();
+  const id = crypto.randomUUID();
+
+  const { rows } = await pool.query<{
+    id: string;
+    project_id: string;
+    user_id: string;
+    name: string;
+    file_type: string;
+    mime_type: string | null;
+    file_extension: string | null;
+    file_size: string | number;
+    file_id: string | null;
+    file_url: string | null;
+    content: string | null;
+    description: string | null;
+    created_at: Date | string;
+    updated_at: Date | string;
+  }>(
+    `INSERT INTO project_documents (
+      id, project_id, user_id, name, file_type, mime_type, file_extension,
+      file_size, file_id, file_url, content, description, created_at, updated_at
+    )
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())
+    RETURNING *`,
+    [
+      id,
+      data.projectId,
+      data.userId,
+      data.name.trim(),
+      data.fileType,
+      data.mimeType || null,
+      data.fileExtension || null,
+      data.fileSize || 0,
+      data.fileId || null,
+      data.fileUrl || null,
+      data.content ?? "",
+      data.description?.trim() ?? "",
+    ]
+  );
+
+  const user = await findUserById(data.userId);
+  const row = rows[0];
+
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    userId: row.user_id,
+    name: row.name,
+    fileType: row.file_type as DocumentType,
+    mimeType: row.mime_type || undefined,
+    fileExtension: row.file_extension || undefined,
+    fileSize: Number(row.file_size) || 0,
+    fileId: row.file_id || undefined,
+    fileUrl: row.file_url || undefined,
+    content: row.content || "",
+    description: row.description || "",
+    createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),
+    updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : String(row.updated_at),
+    uploaderName: user?.username || "Member",
+    uploaderFullName: user?.fullName,
+    uploaderAvatar: user?.avatarUrl,
+  };
+}
+
+export async function updateProjectDocument(
+  id: string,
+  projectId: string,
+  updates: {
+    name?: string;
+    content?: string;
+    description?: string;
+    fileUrl?: string;
+    fileSize?: number;
+    fileType?: DocumentType;
+    fileExtension?: string;
+    mimeType?: string;
+  }
+): Promise<ProjectDocument | null> {
+  await ensureProjectDocumentsTableExists();
+  const pool = getPool();
+
+  const setClauses: string[] = ["updated_at = NOW()"];
+  const params: unknown[] = [id, projectId];
+
+  if (updates.name !== undefined) {
+    params.push(updates.name.trim());
+    setClauses.push(`name = $${params.length}`);
+  }
+  if (updates.content !== undefined) {
+    params.push(updates.content);
+    setClauses.push(`content = $${params.length}`);
+  }
+  if (updates.description !== undefined) {
+    params.push(updates.description.trim());
+    setClauses.push(`description = $${params.length}`);
+  }
+  if (updates.fileUrl !== undefined) {
+    params.push(updates.fileUrl);
+    setClauses.push(`file_url = $${params.length}`);
+  }
+  if (updates.fileSize !== undefined) {
+    params.push(updates.fileSize);
+    setClauses.push(`file_size = $${params.length}`);
+  }
+  if (updates.fileType !== undefined) {
+    params.push(updates.fileType);
+    setClauses.push(`file_type = $${params.length}`);
+  }
+  if (updates.fileExtension !== undefined) {
+    params.push(updates.fileExtension);
+    setClauses.push(`file_extension = $${params.length}`);
+  }
+  if (updates.mimeType !== undefined) {
+    params.push(updates.mimeType);
+    setClauses.push(`mime_type = $${params.length}`);
+  }
+
+  const query = `
+    UPDATE project_documents
+    SET ${setClauses.join(", ")}
+    WHERE id = $1 AND project_id = $2
+    RETURNING *
+  `;
+
+  const { rows } = await pool.query(query, params);
+  if (rows.length === 0) return null;
+
+  const row = rows[0];
+  const user = await findUserById(row.user_id);
+
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    userId: row.user_id,
+    name: row.name,
+    fileType: row.file_type as DocumentType,
+    mimeType: row.mime_type || undefined,
+    fileExtension: row.file_extension || undefined,
+    fileSize: Number(row.file_size) || 0,
+    fileUrl: row.file_url || undefined,
+    content: row.content || "",
+    description: row.description || "",
+    createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),
+    updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : String(row.updated_at),
+    uploaderName: user?.username || "Member",
+    uploaderFullName: user?.fullName,
+    uploaderAvatar: user?.avatarUrl,
+  };
+}
+
+export async function deleteProjectDocument(id: string, projectId: string): Promise<boolean> {
+  await ensureProjectDocumentsTableExists();
+  const pool = getPool();
+  const res = await pool.query(
+    "DELETE FROM project_documents WHERE id = $1 AND project_id = $2",
+    [id, projectId]
+  );
+  return (res.rowCount ?? 0) > 0;
+}
+
+export async function getProjectDocumentById(id: string, projectId: string): Promise<ProjectDocument | null> {
+  await ensureProjectDocumentsTableExists();
+  const pool = getPool();
+  const { rows } = await pool.query<{
+    id: string;
+    project_id: string;
+    user_id: string;
+    name: string;
+    file_type: string;
+    mime_type: string | null;
+    file_extension: string | null;
+    file_size: string | number;
+    file_id: string | null;
+    file_url: string | null;
+    content: string | null;
+    description: string | null;
+    created_at: Date | string;
+    updated_at: Date | string;
+    username: string | null;
+    full_name: string | null;
+    avatar_url: string | null;
+  }>(
+    `SELECT d.id, d.project_id, d.user_id, d.name, d.file_type, d.mime_type,
+            d.file_extension, d.file_size, d.file_id, d.file_url, d.content, d.description,
+            d.created_at, d.updated_at,
+            u.username, u.full_name, u.avatar_url
+     FROM project_documents d
+     LEFT JOIN users u ON d.user_id = u.id
+     WHERE d.id = $1 AND d.project_id = $2
+     LIMIT 1`,
+    [id, projectId]
+  );
+
+  if (rows.length === 0) return null;
+  const r = rows[0];
+
+  return {
+    id: r.id,
+    projectId: r.project_id,
+    userId: r.user_id,
+    name: r.name,
+    fileType: (r.file_type as DocumentType) || "file",
+    mimeType: r.mime_type || undefined,
+    fileExtension: r.file_extension || undefined,
+    fileSize: Number(r.file_size) || 0,
+    fileId: r.file_id || undefined,
+    fileUrl: r.file_url || undefined,
+    content: r.content || "",
+    description: r.description || "",
+    createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
+    updatedAt: r.updated_at instanceof Date ? r.updated_at.toISOString() : String(r.updated_at),
+    uploaderName: r.username || "Member",
+    uploaderFullName: r.full_name || undefined,
+    uploaderAvatar: r.avatar_url || undefined,
+  };
+}
+
+// ==========================================
+// PROJECT BULK OPENER TABLE & CRUD
+// ==========================================
+export async function ensureBulkOpenersTableExists(): Promise<void> {
+  if (bulkOpenersInitialized) return;
+  try {
+    await ensureUsersTableExists();
+    await ensureTableExists();
+    const pool = getPool();
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS project_bulk_openers (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        project_id TEXT UNIQUE NOT NULL,
+        user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+        content TEXT DEFAULT '',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_bulk_openers_project ON project_bulk_openers(project_id);
+    `);
+    bulkOpenersInitialized = true;
+  } catch (err) {
+    console.warn("ensureBulkOpenersTableExists warning (continuing):", err);
+    bulkOpenersInitialized = true;
+  }
+}
+
+export async function getProjectBulkOpener(
+  projectId: string
+): Promise<{ content: string; updatedAt: string }> {
+  await ensureBulkOpenersTableExists();
+  const pool = getPool();
+  const { rows } = await pool.query<{
+    content: string | null;
+    updated_at: Date | string;
+  }>(
+    "SELECT content, updated_at FROM project_bulk_openers WHERE project_id = $1 LIMIT 1",
+    [projectId]
+  );
+
+  if (rows.length === 0) {
+    return { content: "", updatedAt: new Date().toISOString() };
+  }
+
+  const row = rows[0];
+  return {
+    content: row.content || "",
+    updatedAt:
+      row.updated_at instanceof Date
+        ? row.updated_at.toISOString()
+        : String(row.updated_at),
+  };
+}
+
+export async function saveProjectBulkOpener(
+  projectId: string,
+  content: string,
+  userId?: string
+): Promise<{ content: string; updatedAt: string }> {
+  await ensureBulkOpenersTableExists();
+  const pool = getPool();
+
+  const { rows } = await pool.query<{
+    content: string | null;
+    updated_at: Date | string;
+  }>(
+    `INSERT INTO project_bulk_openers (project_id, user_id, content, created_at, updated_at)
+     VALUES ($1, $2, $3, NOW(), NOW())
+     ON CONFLICT (project_id) DO UPDATE SET
+       content = EXCLUDED.content,
+       user_id = COALESCE(EXCLUDED.user_id, project_bulk_openers.user_id),
+       updated_at = NOW()
+     RETURNING content, updated_at`,
+    [projectId, userId || null, content]
+  );
+
+  const row = rows[0];
+  return {
+    content: row.content || "",
+    updatedAt:
+      row.updated_at instanceof Date
+        ? row.updated_at.toISOString()
+        : String(row.updated_at),
+  };
+}
+
+export async function deleteProjectBulkOpener(projectId: string): Promise<boolean> {
+  await ensureBulkOpenersTableExists();
+  const pool = getPool();
+  const res = await pool.query(
+    "DELETE FROM project_bulk_openers WHERE project_id = $1",
+    [projectId]
+  );
+  return (res.rowCount ?? 0) > 0;
+}
+
+// ==========================================
+// SAVED COMMANDS TABLE & CRUD
+// ==========================================
+export async function ensureCommandsTableExists(): Promise<void> {
+  if (commandsInitialized) return;
+  const pool = getPool();
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS saved_commands (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      title TEXT DEFAULT '',
+      command TEXT NOT NULL,
+      category TEXT DEFAULT 'github',
+      is_pinned BOOLEAN DEFAULT false,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    ALTER TABLE saved_commands DROP COLUMN IF EXISTS description;
+    ALTER TABLE saved_commands ALTER COLUMN title DROP NOT NULL;
+    ALTER TABLE saved_commands ALTER COLUMN title SET DEFAULT '';
+    CREATE INDEX IF NOT EXISTS idx_saved_commands_user_id ON saved_commands(user_id);
+    CREATE INDEX IF NOT EXISTS idx_saved_commands_category ON saved_commands(category);
+  `);
+  commandsInitialized = true;
+}
+
+export async function getCommands(userId: string): Promise<SavedCommand[]> {
+  await ensureCommandsTableExists();
+  const pool = getPool();
+  const { rows } = await pool.query<{
+    id: string;
+    title: string | null;
+    command: string;
+    category: string | null;
+    is_pinned: boolean | null;
+    created_at: Date | string;
+    updated_at: Date | string | null;
+    user_id: string;
+  }>(
+    "SELECT id, title, command, category, is_pinned, created_at, updated_at, user_id FROM saved_commands WHERE user_id = $1 ORDER BY is_pinned DESC, created_at DESC",
+    [userId]
+  );
+
+  return rows.map((row) => ({
+    id: row.id,
+    title: row.title || "",
+    command: row.command,
+    category: row.category || "github",
+    isPinned: Boolean(row.is_pinned),
+    createdAt:
+      row.created_at instanceof Date
+        ? row.created_at.toISOString()
+        : String(row.created_at || new Date().toISOString()),
+    updatedAt:
+      row.updated_at instanceof Date
+        ? row.updated_at.toISOString()
+        : row.updated_at
+        ? String(row.updated_at)
+        : undefined,
+    userId: row.user_id,
+  }));
+}
+
+export async function saveCommand(
+  item: {
+    id: string;
+    title?: string;
+    command: string;
+    category?: string;
+    isPinned?: boolean;
+    createdAt?: string;
+  },
+  userId: string
+): Promise<SavedCommand> {
+  await ensureCommandsTableExists();
+  const pool = getPool();
+  const createdAt = item.createdAt ? new Date(item.createdAt) : new Date();
+  const category = item.category || "github";
+  const isPinned = Boolean(item.isPinned);
+  const titleText = item.title?.trim() || "";
+
+  await pool.query(
+    `
+    INSERT INTO saved_commands (id, user_id, title, command, category, is_pinned, created_at, updated_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+    ON CONFLICT (id) DO UPDATE SET
+      title = EXCLUDED.title,
+      command = EXCLUDED.command,
+      category = EXCLUDED.category,
+      is_pinned = EXCLUDED.is_pinned,
+      updated_at = NOW(),
+      user_id = COALESCE(saved_commands.user_id, EXCLUDED.user_id);
+    `,
+    [
+      item.id,
+      userId,
+      titleText,
+      item.command,
+      category,
+      isPinned,
+      createdAt,
+    ]
+  );
+
+  return {
+    id: item.id,
+    title: titleText,
+    command: item.command,
+    category,
+    isPinned,
+    createdAt: createdAt.toISOString(),
+    updatedAt: new Date().toISOString(),
+    userId,
+  };
+}
+
+export async function deleteCommand(id: string, userId: string): Promise<void> {
+  await ensureCommandsTableExists();
+  const pool = getPool();
+  await pool.query("DELETE FROM saved_commands WHERE id = $1 AND user_id = $2", [id, userId]);
 }
 
 

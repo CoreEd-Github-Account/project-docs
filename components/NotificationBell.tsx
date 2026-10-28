@@ -27,15 +27,31 @@ function formatRelativeTime(dateString: string): string {
 
 interface NotificationBellProps {
   className?: string;
+  align?: "left" | "center" | "right";
+  onUnreadCountChange?: (count: number) => void;
+  onDropdownOpenChange?: (open: boolean) => void;
 }
 
-export function NotificationBell({ className = "" }: NotificationBellProps) {
+export function NotificationBell({
+  className = "",
+  align = "right",
+  onUnreadCountChange,
+  onDropdownOpenChange,
+}: NotificationBellProps) {
   const [notifications, setNotifications] = useState<TaskNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState<number>(0);
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
+
+  useEffect(() => {
+    onUnreadCountChange?.(unreadCount);
+  }, [unreadCount, onUnreadCountChange]);
+
+  useEffect(() => {
+    onDropdownOpenChange?.(isOpen);
+  }, [isOpen, onDropdownOpenChange]);
 
   // Fetch notifications with live sync
   const fetchNotifications = useCallback(async (isSilent = true) => {
@@ -140,17 +156,20 @@ export function NotificationBell({ className = "" }: NotificationBellProps) {
   };
 
   return (
-    <div className={`relative ${className}`} ref={dropdownRef}>
+    <div className={`relative group/bell ${className}`} ref={dropdownRef}>
       {/* Bell Icon Trigger */}
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         aria-label={`Notifications (${unreadCount} unread)`}
-        title={unreadCount > 0 ? `${unreadCount} unread notification(s)` : "Notifications"}
-        className="relative p-2 rounded-lg bg-slate-800/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/80 hover:border-blue-500/50 transition cursor-pointer flex items-center justify-center shadow-sm"
+        className={`relative w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200 cursor-pointer border ${
+          isOpen
+            ? "bg-blue-600/20 text-blue-400 border-blue-500/50 shadow-lg shadow-blue-500/10"
+            : "bg-slate-900/75 hover:bg-slate-800/90 text-slate-300 hover:text-white border-slate-800/90 hover:border-slate-700 hover:-translate-y-0.5 hover:scale-105 active:scale-95 shadow-md"
+        }`}
       >
         <svg
-          className="w-4 h-4 transition-transform group-hover:scale-110"
+          className="w-[18px] h-[18px] transition-transform duration-200 group-hover/bell:rotate-12"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -158,22 +177,37 @@ export function NotificationBell({ className = "" }: NotificationBellProps) {
           <path
             strokeLinecap="round"
             strokeLinejoin="round"
-            strokeWidth={2}
-            d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
+            strokeWidth={1.8}
+            d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0"
           />
         </svg>
 
         {/* Live Unread Badge */}
         {unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-extrabold text-white bg-rose-600 rounded-full border-2 border-slate-950 animate-pulse shadow-md shadow-rose-600/40">
+          <span className="absolute -top-1.5 -right-1.5 flex items-center justify-center min-w-[19px] h-[19px] px-1 text-[10px] font-bold font-mono text-white bg-rose-500 rounded-full border-2 border-slate-950 shadow-md shadow-rose-500/50">
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
         )}
       </button>
 
+      {/* Hover Tooltip (hidden when dropdown is open) */}
+      {!isOpen && (
+        <div className="pointer-events-none absolute top-full mt-2 left-1/2 -translate-x-1/2 px-2.5 py-1 rounded-lg bg-slate-900/95 border border-slate-700/80 text-[11px] font-medium text-slate-200 whitespace-nowrap opacity-0 -translate-y-1 group-hover/bell:opacity-100 group-hover/bell:translate-y-0 transition-all duration-150 shadow-xl z-30">
+          {unreadCount > 0 ? `Notifications (${unreadCount})` : "Notifications"}
+        </div>
+      )}
+
       {/* Flyout Notification Dropdown */}
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-slate-900 border border-slate-700/90 rounded-2xl shadow-2xl shadow-black/80 z-50 overflow-hidden backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150">
+        <div
+          className={`absolute ${
+            align === "center"
+              ? "left-1/2 -translate-x-1/2"
+              : align === "left"
+                ? "left-0"
+                : "right-0"
+          } mt-3 w-80 sm:w-96 bg-slate-900 border border-slate-700/90 rounded-2xl shadow-2xl shadow-black/80 z-50 overflow-hidden backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150`}
+        >
           {/* Header */}
           <div className="p-3.5 bg-slate-900/95 border-b border-slate-800 flex items-center justify-between">
             <div className="flex items-center gap-2">

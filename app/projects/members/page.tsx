@@ -375,7 +375,7 @@ function ProjectMembersContent() {
                   members.map((member) => {
                     const views = member.allowedViews && member.allowedViews.length > 0
                       ? member.allowedViews
-                      : (["builder", "preview", "tasks"] as ProjectViewTab[]);
+                      : (["builder", "preview", "bulk_opener", "documents", "tasks"] as ProjectViewTab[]);
                     const isUpdating = updatingMemberId === member.userId;
 
                     return (
@@ -460,6 +460,34 @@ function ProjectMembersContent() {
                               }`}
                             >
                               👁️ Preview
+                            </button>
+
+                            <button
+                              type="button"
+                              disabled={!isOwner || isUpdating}
+                              onClick={() => handleToggleModule(member.userId, views, "bulk_opener")}
+                              title="Toggle Bulk Opener access for this member"
+                              className={`px-2 py-1 rounded-md text-[11px] font-medium border transition cursor-pointer ${
+                                views.includes("bulk_opener")
+                                  ? "bg-cyan-600/20 border-cyan-500/50 text-cyan-300 shadow-sm"
+                                  : "bg-slate-950 border-slate-800 text-slate-600 line-through opacity-60"
+                              }`}
+                            >
+                              🚀 Bulk Opener
+                            </button>
+
+                            <button
+                              type="button"
+                              disabled={!isOwner || isUpdating}
+                              onClick={() => handleToggleModule(member.userId, views, "documents")}
+                              title="Toggle Documents access for this member"
+                              className={`px-2 py-1 rounded-md text-[11px] font-medium border transition cursor-pointer ${
+                                views.includes("documents")
+                                  ? "bg-blue-600/20 border-blue-500/50 text-blue-300 shadow-sm"
+                                  : "bg-slate-950 border-slate-800 text-slate-600 line-through opacity-60"
+                              }`}
+                            >
+                              📁 Documents
                             </button>
 
                             <button
