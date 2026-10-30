@@ -131,6 +131,10 @@ export function NotificationBell({
     }
 
     setIsOpen(false);
+    if (notif.type === "expense_reminder") {
+      router.push("/expenses");
+      return;
+    }
     router.push(`/projects?projectId=${encodeURIComponent(notif.projectId)}&tab=tasks`);
   };
 

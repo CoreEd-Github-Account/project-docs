@@ -8,7 +8,9 @@ import {
   markAllNotificationsRead,
   deleteNotification,
   clearAllNotifications,
+  getAllMonthlyExpenses,
 } from "@/lib/db";
+import type { TaskNotification } from "@/lib/types";
 
 export async function GET() {
   const auth = await getAuthenticatedUser();
@@ -17,14 +19,50 @@ export async function GET() {
   }
 
   try {
-    const [notifications, unreadCount] = await Promise.all([
+    const [notifications, unreadCount, monthlyExpenses] = await Promise.all([
       getNotificationsByUser(auth.user.id),
       getUnreadNotificationCount(auth.user.id),
+      getAllMonthlyExpenses(auth.user.id),
     ]);
 
+    // Synthesize 3-day reminders for unpaid monthly payables due within <= 3 days
+    const nowMs = Date.now();
+    const expenseReminders: TaskNotification[] = [];
+    for (const exp of monthlyExpenses) {
+      if (exp.isPaid || !exp.dueDate) continue;
+      const parts = exp.dueDate.split("-").map(Number);
+      if (parts.length !== 3) continue;
+      const targetMs = new Date(parts[0], parts[1] - 1, parts[2], 23, 59, 59).getTime();
+      const diffDays = (targetMs - nowMs) / (1000 * 60 * 60 * 24);
+      if (diffDays <= 3) {
+        const daysInt = Math.max(0, Math.floor((targetMs - nowMs) / (1000 * 60 * 60 * 24)));
+        const dueLabel =
+          targetMs < nowMs
+            ? "is overdue"
+            : daysInt === 0
+              ? "is due today"
+              : `is due in ${daysInt} day${daysInt === 1 ? "" : "s"}`;
+        expenseReminders.push({
+          id: `expense-reminder-${exp.id}-${exp.dueDate}`,
+          userId: auth.user.id,
+          projectId: "expenses",
+          projectName: "Monthly Expense",
+          actorId: auth.user.id,
+          actorName: "Reminder",
+          actorFullName: "Monthly Expense",
+          actorAvatar: "🧾",
+          type: "expense_reminder",
+          title: `3-Day Bill Reminder: ${exp.name}`,
+          message: `${exp.name} (PKR ${exp.amount.toLocaleString()}) ${dueLabel} (${exp.dueDate}).`,
+          isRead: false,
+          createdAt: new Date().toISOString(),
+        });
+      }
+    }
+
     return NextResponse.json({
-      notifications,
-      unreadCount,
+      notifications: [...expenseReminders, ...notifications],
+      unreadCount: unreadCount + expenseReminders.length,
     });
   } catch (error) {
     console.error("GET /api/notifications error:", error);

@@ -22,8 +22,10 @@ import type {
   TaskNotification,
   ProjectStatusStage,
   ProjectDocument,
+  ProjectDocumentFolder,
   DocumentType,
   SavedCommand,
+  MonthlyExpense,
 } from "./types";
 
 let poolInstance: Pool | null = null;
@@ -41,6 +43,7 @@ let notificationsInitialized = false;
 let documentsInitialized = false;
 let bulkOpenersInitialized = false;
 let commandsInitialized = false;
+let monthlyExpensesInitialized = false;
 
 function resolveConnectionString(raw: string): string {
   try {
@@ -2301,10 +2304,20 @@ export async function ensureProjectDocumentsTableExists(): Promise<void> {
     await ensureTableExists();
     const pool = getPool();
     await pool.query(`
+      CREATE TABLE IF NOT EXISTS project_document_folders (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        project_id TEXT NOT NULL,
+        user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+        name TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_project_doc_folders_project ON project_document_folders(project_id);
+
       CREATE TABLE IF NOT EXISTS project_documents (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         project_id TEXT NOT NULL,
         user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        folder_id TEXT,
         name TEXT NOT NULL,
         file_type TEXT NOT NULL,
         mime_type TEXT,
@@ -2318,8 +2331,10 @@ export async function ensureProjectDocumentsTableExists(): Promise<void> {
         updated_at TIMESTAMPTZ DEFAULT NOW()
       );
       ALTER TABLE project_documents ADD COLUMN IF NOT EXISTS file_id TEXT;
+      ALTER TABLE project_documents ADD COLUMN IF NOT EXISTS folder_id TEXT;
       CREATE INDEX IF NOT EXISTS idx_project_docs_project ON project_documents(project_id);
       CREATE INDEX IF NOT EXISTS idx_project_docs_user ON project_documents(user_id);
+      CREATE INDEX IF NOT EXISTS idx_project_docs_folder ON project_documents(folder_id);
       CREATE INDEX IF NOT EXISTS idx_project_docs_updated ON project_documents(updated_at DESC);
     `);
     documentsInitialized = true;
@@ -2329,6 +2344,82 @@ export async function ensureProjectDocumentsTableExists(): Promise<void> {
   }
 }
 
+export async function getProjectDocumentFolders(projectId: string): Promise<ProjectDocumentFolder[]> {
+  await ensureProjectDocumentsTableExists();
+  const pool = getPool();
+  const { rows } = await pool.query<{
+    id: string;
+    project_id: string;
+    user_id: string | null;
+    name: string;
+    created_at: Date | string;
+  }>(
+    `SELECT id, project_id, user_id, name, created_at
+     FROM project_document_folders
+     WHERE project_id = $1
+     ORDER BY created_at ASC`,
+    [projectId]
+  );
+
+  return rows.map((r) => ({
+    id: r.id,
+    projectId: r.project_id,
+    userId: r.user_id || undefined,
+    name: r.name,
+    createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
+  }));
+}
+
+export async function createProjectDocumentFolder(
+  projectId: string,
+  userId: string,
+  name: string
+): Promise<ProjectDocumentFolder> {
+  await ensureProjectDocumentsTableExists();
+  const pool = getPool();
+  const id = crypto.randomUUID();
+  const cleanName = name.trim();
+
+  const { rows } = await pool.query<{
+    id: string;
+    project_id: string;
+    user_id: string | null;
+    name: string;
+    created_at: Date | string;
+  }>(
+    `INSERT INTO project_document_folders (id, project_id, user_id, name, created_at)
+     VALUES ($1, $2, $3, $4, NOW())
+     RETURNING *`,
+    [id, projectId, userId, cleanName]
+  );
+
+  const r = rows[0];
+  return {
+    id: r.id,
+    projectId: r.project_id,
+    userId: r.user_id || undefined,
+    name: r.name,
+    createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
+  };
+}
+
+export async function deleteProjectDocumentFolder(
+  folderId: string,
+  projectId: string
+): Promise<boolean> {
+  await ensureProjectDocumentsTableExists();
+  const pool = getPool();
+  await pool.query(
+    "UPDATE project_documents SET folder_id = NULL WHERE folder_id = $1 AND project_id = $2",
+    [folderId, projectId]
+  );
+  const res = await pool.query(
+    "DELETE FROM project_document_folders WHERE id = $1 AND project_id = $2",
+    [folderId, projectId]
+  );
+  return (res.rowCount ?? 0) > 0;
+}
+
 export async function getProjectDocuments(projectId: string): Promise<ProjectDocument[]> {
   await ensureProjectDocumentsTableExists();
   const pool = getPool();
@@ -2336,6 +2427,7 @@ export async function getProjectDocuments(projectId: string): Promise<ProjectDoc
     id: string;
     project_id: string;
     user_id: string;
+    folder_id: string | null;
     name: string;
     file_type: string;
     mime_type: string | null;
@@ -2351,7 +2443,7 @@ export async function getProjectDocuments(projectId: string): Promise<ProjectDoc
     full_name: string | null;
     avatar_url: string | null;
   }>(
-    `SELECT d.id, d.project_id, d.user_id, d.name, d.file_type, d.mime_type,
+    `SELECT d.id, d.project_id, d.user_id, d.folder_id, d.name, d.file_type, d.mime_type,
             d.file_extension, d.file_size, d.file_id, d.file_url, d.content, d.description,
             d.created_at, d.updated_at,
             u.username, u.full_name, u.avatar_url
@@ -2366,6 +2458,7 @@ export async function getProjectDocuments(projectId: string): Promise<ProjectDoc
     id: r.id,
     projectId: r.project_id,
     userId: r.user_id,
+    folderId: r.folder_id || null,
     name: r.name,
     fileType: (r.file_type as DocumentType) || "file",
     mimeType: r.mime_type || undefined,
@@ -2386,6 +2479,7 @@ export async function getProjectDocuments(projectId: string): Promise<ProjectDoc
 export async function createProjectDocument(data: {
   projectId: string;
   userId: string;
+  folderId?: string | null;
   name: string;
   fileType: DocumentType;
   mimeType?: string;
@@ -2404,6 +2498,7 @@ export async function createProjectDocument(data: {
     id: string;
     project_id: string;
     user_id: string;
+    folder_id: string | null;
     name: string;
     file_type: string;
     mime_type: string | null;
@@ -2417,15 +2512,16 @@ export async function createProjectDocument(data: {
     updated_at: Date | string;
   }>(
     `INSERT INTO project_documents (
-      id, project_id, user_id, name, file_type, mime_type, file_extension,
+      id, project_id, user_id, folder_id, name, file_type, mime_type, file_extension,
       file_size, file_id, file_url, content, description, created_at, updated_at
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
     RETURNING *`,
     [
       id,
       data.projectId,
       data.userId,
+      data.folderId || null,
       data.name.trim(),
       data.fileType,
       data.mimeType || null,
@@ -2445,6 +2541,7 @@ export async function createProjectDocument(data: {
     id: row.id,
     projectId: row.project_id,
     userId: row.user_id,
+    folderId: row.folder_id || null,
     name: row.name,
     fileType: row.file_type as DocumentType,
     mimeType: row.mime_type || undefined,
@@ -2469,6 +2566,8 @@ export async function updateProjectDocument(
     name?: string;
     content?: string;
     description?: string;
+    folderId?: string | null;
+    fileId?: string;
     fileUrl?: string;
     fileSize?: number;
     fileType?: DocumentType;
@@ -2493,6 +2592,14 @@ export async function updateProjectDocument(
   if (updates.description !== undefined) {
     params.push(updates.description.trim());
     setClauses.push(`description = $${params.length}`);
+  }
+  if (updates.folderId !== undefined) {
+    params.push(updates.folderId || null);
+    setClauses.push(`folder_id = $${params.length}`);
+  }
+  if (updates.fileId !== undefined) {
+    params.push(updates.fileId);
+    setClauses.push(`file_id = $${params.length}`);
   }
   if (updates.fileUrl !== undefined) {
     params.push(updates.fileUrl);
@@ -2532,6 +2639,7 @@ export async function updateProjectDocument(
     id: row.id,
     projectId: row.project_id,
     userId: row.user_id,
+    folderId: row.folder_id || null,
     name: row.name,
     fileType: row.file_type as DocumentType,
     mimeType: row.mime_type || undefined,
@@ -2565,6 +2673,7 @@ export async function getProjectDocumentById(id: string, projectId: string): Pro
     id: string;
     project_id: string;
     user_id: string;
+    folder_id: string | null;
     name: string;
     file_type: string;
     mime_type: string | null;
@@ -2580,7 +2689,7 @@ export async function getProjectDocumentById(id: string, projectId: string): Pro
     full_name: string | null;
     avatar_url: string | null;
   }>(
-    `SELECT d.id, d.project_id, d.user_id, d.name, d.file_type, d.mime_type,
+    `SELECT d.id, d.project_id, d.user_id, d.folder_id, d.name, d.file_type, d.mime_type,
             d.file_extension, d.file_size, d.file_id, d.file_url, d.content, d.description,
             d.created_at, d.updated_at,
             u.username, u.full_name, u.avatar_url
@@ -2598,6 +2707,7 @@ export async function getProjectDocumentById(id: string, projectId: string): Pro
     id: r.id,
     projectId: r.project_id,
     userId: r.user_id,
+    folderId: r.folder_id || null,
     name: r.name,
     fileType: (r.file_type as DocumentType) || "file",
     mimeType: r.mime_type || undefined,
@@ -2832,5 +2942,145 @@ export async function deleteCommand(id: string, userId: string): Promise<void> {
   const pool = getPool();
   await pool.query("DELETE FROM saved_commands WHERE id = $1 AND user_id = $2", [id, userId]);
 }
+
+// ==========================================
+// MONTHLY EXPENSES TABLE & DATA-ISOLATED CRUD
+// ==========================================
+export async function ensureMonthlyExpensesTableExists(): Promise<void> {
+  if (monthlyExpensesInitialized) return;
+  const pool = getPool();
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS monthly_expenses (
+      id TEXT PRIMARY KEY,
+      user_id UUID NOT NULL,
+      name TEXT NOT NULL,
+      category TEXT DEFAULT 'anonymous',
+      amount NUMERIC NOT NULL DEFAULT 0,
+      due_date TEXT NOT NULL,
+      is_paid BOOLEAN DEFAULT false,
+      created_at BIGINT NOT NULL
+    );
+    ALTER TABLE monthly_expenses DROP COLUMN IF EXISTS notes;
+    ALTER TABLE monthly_expenses ALTER COLUMN category SET DEFAULT 'anonymous';
+    CREATE INDEX IF NOT EXISTS idx_monthly_expenses_user_id ON monthly_expenses(user_id);
+    CREATE INDEX IF NOT EXISTS idx_monthly_expenses_due_date ON monthly_expenses(due_date);
+
+    CREATE TABLE IF NOT EXISTS monthly_expense_categories (
+      id TEXT PRIMARY KEY,
+      user_id UUID NOT NULL,
+      name TEXT NOT NULL,
+      created_at BIGINT NOT NULL,
+      UNIQUE(user_id, name)
+    );
+    CREATE INDEX IF NOT EXISTS idx_monthly_expense_categories_user_id ON monthly_expense_categories(user_id);
+  `);
+  monthlyExpensesInitialized = true;
+}
+
+export async function getMonthlyExpenseCategories(userId: string): Promise<string[]> {
+  await ensureMonthlyExpensesTableExists();
+  const pool = getPool();
+  const { rows } = await pool.query<{ name: string }>(
+    "SELECT name FROM monthly_expense_categories WHERE user_id = $1 ORDER BY created_at ASC",
+    [userId]
+  );
+  return rows.map((r) => r.name);
+}
+
+export async function saveMonthlyExpenseCategory(
+  name: string,
+  userId: string
+): Promise<void> {
+  const clean = name.trim();
+  if (!clean || clean.toLowerCase() === "anonymous") return;
+  await ensureMonthlyExpensesTableExists();
+  const pool = getPool();
+  const id = `expcat-${userId}-${clean.toLowerCase().replace(/[^a-z0-9_-]/g, "-")}`;
+  await pool.query(
+    `
+    INSERT INTO monthly_expense_categories (id, user_id, name, created_at)
+    VALUES ($1, $2, $3, $4)
+    ON CONFLICT (user_id, name) DO NOTHING
+    `,
+    [id, userId, clean, Date.now()]
+  );
+}
+
+export async function getAllMonthlyExpenses(userId: string): Promise<MonthlyExpense[]> {
+  await ensureMonthlyExpensesTableExists();
+  const pool = getPool();
+  const { rows } = await pool.query<{
+    id: string;
+    user_id: string;
+    name: string;
+    category: string | null;
+    amount: string | number;
+    due_date: string;
+    is_paid: boolean | null;
+    created_at: string | number;
+  }>(
+    "SELECT id, user_id, name, category, amount, due_date, is_paid, created_at FROM monthly_expenses WHERE user_id = $1 ORDER BY is_paid ASC, due_date ASC, created_at DESC",
+    [userId]
+  );
+
+  return rows.map((row) => ({
+    id: row.id,
+    userId: row.user_id,
+    name: row.name,
+    category: row.category || "anonymous",
+    amount: Number(row.amount) || 0,
+    dueDate: row.due_date,
+    isPaid: Boolean(row.is_paid),
+    createdAt: Number(row.created_at) || Date.now(),
+  }));
+}
+
+export async function saveMonthlyExpense(
+  expense: MonthlyExpense,
+  userId: string
+): Promise<void> {
+  await ensureMonthlyExpensesTableExists();
+  const pool = getPool();
+  const createdAt = expense.createdAt || Date.now();
+  const categoryName = expense.category?.trim() || "anonymous";
+
+  if (categoryName.toLowerCase() !== "anonymous") {
+    await saveMonthlyExpenseCategory(categoryName, userId);
+  }
+
+  await pool.query(
+    `
+    INSERT INTO monthly_expenses (id, user_id, name, category, amount, due_date, is_paid, created_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    ON CONFLICT (id) DO UPDATE SET
+      name = EXCLUDED.name,
+      category = EXCLUDED.category,
+      amount = EXCLUDED.amount,
+      due_date = EXCLUDED.due_date,
+      is_paid = EXCLUDED.is_paid,
+      user_id = COALESCE(monthly_expenses.user_id, EXCLUDED.user_id)
+    `,
+    [
+      expense.id,
+      userId,
+      expense.name,
+      categoryName,
+      expense.amount,
+      expense.dueDate,
+      Boolean(expense.isPaid),
+      createdAt,
+    ]
+  );
+}
+
+export async function deleteMonthlyExpense(id: string, userId: string): Promise<void> {
+  await ensureMonthlyExpensesTableExists();
+  const pool = getPool();
+  await pool.query("DELETE FROM monthly_expenses WHERE id = $1 AND user_id = $2", [
+    id,
+    userId,
+  ]);
+}
+
 
 

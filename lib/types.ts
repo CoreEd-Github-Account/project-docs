@@ -110,10 +110,19 @@ export interface ProjectBulkOpener {
 
 export type DocumentType = "markdown" | "text" | "image" | "file";
 
+export interface ProjectDocumentFolder {
+  id: string;
+  projectId: string;
+  userId?: string;
+  name: string;
+  createdAt: string;
+}
+
 export interface ProjectDocument {
   id: string;
   projectId: string;
   userId: string;
+  folderId?: string | null;
   name: string;
   fileType: DocumentType;
   mimeType?: string;
@@ -273,4 +282,16 @@ export interface TaskNotification {
   isRead: boolean;
   createdAt: string;
 }
+
+export interface MonthlyExpense {
+  id: string;
+  name: string;
+  category: string;
+  amount: number;
+  dueDate: string; // YYYY-MM-DD
+  isPaid?: boolean;
+  createdAt?: number;
+  userId?: string;
+}
+
 

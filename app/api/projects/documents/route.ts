@@ -3,6 +3,9 @@ import { getAuthenticatedUser } from "@/lib/auth";
 import {
   getProjectPermission,
   getProjectDocuments,
+  getProjectDocumentFolders,
+  createProjectDocumentFolder,
+  deleteProjectDocumentFolder,
   createProjectDocument,
   updateProjectDocument,
   deleteProjectDocument,
@@ -33,8 +36,12 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Access denied to project" }, { status: 403 });
     }
 
-    const documents = await getProjectDocuments(projectId);
-    return NextResponse.json({ success: true, documents });
+    const [documents, folders] = await Promise.all([
+      getProjectDocuments(projectId),
+      getProjectDocumentFolders(projectId),
+    ]);
+
+    return NextResponse.json({ success: true, documents, folders });
   } catch (error: any) {
     console.error("GET /api/projects/documents error:", error);
     return NextResponse.json(
@@ -58,6 +65,7 @@ export async function POST(request: Request) {
       const formData = await request.formData();
       const file = formData.get("file") as File | null;
       const projectId = formData.get("projectId") as string | null;
+      const folderId = (formData.get("folderId") as string | null)?.trim() || null;
       const customName = (formData.get("name") as string | null)?.trim();
       const description = (formData.get("description") as string | null)?.trim() || "";
 
@@ -154,6 +162,7 @@ export async function POST(request: Request) {
       const newDoc = await createProjectDocument({
         projectId,
         userId: auth.user.id,
+        folderId: folderId || null,
         name: fileName,
         fileType: docType,
         mimeType: mime,
@@ -167,15 +176,100 @@ export async function POST(request: Request) {
 
       return NextResponse.json({ success: true, document: newDoc });
     } else {
+      // 2. JSON Mode: Create Folder OR Write .txt File directly in Database
+      const body = await request.json();
+      const projectId = typeof body?.projectId === "string" ? body.projectId.trim() : "";
+
+      if (!projectId) {
+        return NextResponse.json({ error: "Missing projectId" }, { status: 400 });
+      }
+
+      const perm = await getProjectPermission(projectId, auth.user.id);
+      if (!perm) {
+        return NextResponse.json({ error: "Access denied to project" }, { status: 403 });
+      }
+      if (perm === "read") {
+        return NextResponse.json(
+          { error: "Read-only permission. Cannot create folders or documents." },
+          { status: 403 }
+        );
+      }
+
+      // 2a. Create Folder
+      if (body?.action === "create_folder") {
+        const folderName = typeof body?.name === "string" ? body.name.trim() : "";
+        if (!folderName) {
+          return NextResponse.json({ error: "Folder name is required" }, { status: 400 });
+        }
+
+        const folder = await createProjectDocumentFolder(projectId, auth.user.id, folderName);
+        return NextResponse.json({ success: true, folder });
+      }
+
+      // 2b. Write .txt file: upload to ImageKit.io AND save metadata/content in database
+      if (body?.action === "create_txt" || body?.content !== undefined) {
+        const rawName = typeof body?.name === "string" ? body.name.trim() : "";
+        if (!rawName) {
+          return NextResponse.json({ error: "File name is required" }, { status: 400 });
+        }
+
+        const finalName = rawName.toLowerCase().endsWith(".txt") ? rawName : `${rawName}.txt`;
+        const textContent = typeof body?.content === "string" ? body.content : "";
+        const folderId = typeof body?.folderId === "string" && body.folderId.trim() ? body.folderId.trim() : null;
+        const description = typeof body?.description === "string" ? body.description.trim() : "";
+        const buffer = Buffer.from(textContent, "utf8");
+        const byteSize = buffer.byteLength;
+
+        let fileUrl = "";
+        let fileId = "";
+
+        if (isImageKitConfigured()) {
+          try {
+            const sanitizedFileName = finalName
+              .replace(/[^a-zA-Z0-9._-]/g, "_")
+              .substring(0, 100);
+
+            const uploadRes = await imagekit.upload({
+              file: buffer.toString("base64"),
+              fileName: sanitizedFileName || `note-${Date.now()}.txt`,
+              folder: `/projects/${projectId}/documents`,
+              useUniqueFileName: true,
+              tags: ["project-document", projectId, "text"],
+            });
+            fileUrl = uploadRes.url;
+            fileId = uploadRes.fileId;
+          } catch (ikErr) {
+            console.warn("ImageKit upload error for .txt file:", ikErr);
+          }
+        }
+
+        const newDoc = await createProjectDocument({
+          projectId,
+          userId: auth.user.id,
+          folderId,
+          name: finalName,
+          fileType: "text",
+          mimeType: "text/plain",
+          fileExtension: "txt",
+          fileSize: byteSize,
+          fileId: fileId || undefined,
+          fileUrl: fileUrl || undefined,
+          content: textContent,
+          description,
+        });
+
+        return NextResponse.json({ success: true, document: newDoc });
+      }
+
       return NextResponse.json(
-        { error: "Direct document creation is disabled. Please upload a file." },
+        { error: "Unsupported request action." },
         { status: 400 }
       );
     }
   } catch (error: any) {
     console.error("POST /api/projects/documents error:", error);
     return NextResponse.json(
-      { error: error?.message || "Failed to create document" },
+      { error: error?.message || "Failed to create document or folder" },
       { status: 500 }
     );
   }
@@ -189,7 +283,7 @@ export async function PUT(request: Request) {
 
   try {
     const body = await request.json();
-    const { id, projectId, name, content, description } = body;
+    const { id, projectId, name, content, description, folderId } = body;
 
     if (!id || !projectId) {
       return NextResponse.json(
@@ -218,6 +312,9 @@ export async function PUT(request: Request) {
       name?: string;
       content?: string;
       description?: string;
+      folderId?: string | null;
+      fileId?: string;
+      fileUrl?: string;
       fileSize?: number;
     } = {};
 
@@ -227,9 +324,35 @@ export async function PUT(request: Request) {
     if (description !== undefined) {
       updates.description = description.trim();
     }
+    if (folderId !== undefined) {
+      updates.folderId = folderId || null;
+    }
     if (content !== undefined) {
       updates.content = content;
-      updates.fileSize = Buffer.byteLength(content, "utf8");
+      const buffer = Buffer.from(content, "utf8");
+      updates.fileSize = buffer.byteLength;
+
+      if (isImageKitConfigured()) {
+        try {
+          if (existing.fileId) {
+            await imagekit.deleteFile(existing.fileId).catch(() => {});
+          }
+          const targetName = (updates.name || existing.name || `note-${Date.now()}.txt`)
+            .replace(/[^a-zA-Z0-9._-]/g, "_")
+            .substring(0, 100);
+          const uploadRes = await imagekit.upload({
+            file: buffer.toString("base64"),
+            fileName: targetName,
+            folder: `/projects/${projectId}/documents`,
+            useUniqueFileName: true,
+            tags: ["project-document", projectId, existing.fileType || "text"],
+          });
+          updates.fileId = uploadRes.fileId;
+          updates.fileUrl = uploadRes.url;
+        } catch (ikErr) {
+          console.warn("ImageKit re-upload error on PUT:", ikErr);
+        }
+      }
     }
 
     const updated = await updateProjectDocument(id, projectId, updates);
@@ -251,11 +374,12 @@ export async function DELETE(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const id = searchParams.get("id");
+  const folderId = searchParams.get("folderId");
   const projectId = searchParams.get("projectId");
 
-  if (!id || !projectId) {
+  if (!projectId || (!id && !folderId)) {
     return NextResponse.json(
-      { error: "Missing required query parameters: id and projectId" },
+      { error: "Missing required query parameters: projectId and id or folderId" },
       { status: 400 }
     );
   }
@@ -267,12 +391,25 @@ export async function DELETE(request: Request) {
     }
     if (perm === "read") {
       return NextResponse.json(
-        { error: "Read-only permission. Cannot delete documents." },
+        { error: "Read-only permission. Cannot delete documents or folders." },
         { status: 403 }
       );
     }
 
-    const existing = await getProjectDocumentById(id, projectId);
+    // Delete Folder
+    if (folderId) {
+      if (perm === "edit_no_delete") {
+        return NextResponse.json(
+          { error: "Your permission does not allow deleting folders." },
+          { status: 403 }
+        );
+      }
+      await deleteProjectDocumentFolder(folderId, projectId);
+      return NextResponse.json({ success: true, folderId });
+    }
+
+    // Delete Document
+    const existing = await getProjectDocumentById(id!, projectId);
     if (!existing) {
       return NextResponse.json({ error: "Document not found" }, { status: 404 });
     }
@@ -294,7 +431,7 @@ export async function DELETE(request: Request) {
       }
     }
 
-    await deleteProjectDocument(id, projectId);
+    await deleteProjectDocument(id!, projectId);
     return NextResponse.json({ success: true, id });
   } catch (error: any) {
     console.error("DELETE /api/projects/documents error:", error);

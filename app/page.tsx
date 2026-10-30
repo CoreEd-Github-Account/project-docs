@@ -5,7 +5,7 @@ import Link from "next/link";
 import { LoginForm } from "@/components/LoginForm";
 import { NotificationBell } from "@/components/NotificationBell";
 
-type AccentColor = "blue" | "indigo" | "amber" | "purple" | "emerald";
+type AccentColor = "blue" | "indigo" | "amber" | "purple" | "emerald" | "teal";
 
 const ACCENT_RGB: Record<AccentColor, string> = {
   blue: "59, 130, 246",
@@ -13,6 +13,7 @@ const ACCENT_RGB: Record<AccentColor, string> = {
   amber: "245, 158, 11",
   purple: "168, 85, 247",
   emerald: "16, 185, 129",
+  teal: "20, 184, 166",
 };
 
 interface WeatherData {
@@ -924,8 +925,8 @@ export default function HomePortal() {
               </span>
             </button>
 
-            {/* 5 Large Pop-On-Hover Workspace Icons with Rich Tooltips & Live Magnetic Tilt */}
-            <div className="flex flex-wrap items-center justify-center gap-6 sm:gap-10 max-w-4xl mx-auto w-full py-4 [perspective:900px]">
+            {/* 6 Large Pop-On-Hover Workspace Icons with Titles Beneath */}
+            <div className="flex flex-wrap items-center justify-center gap-6 sm:gap-10 max-w-5xl mx-auto w-full py-4 [perspective:900px]">
               {/* ICON 1: PROJECTS */}
               <Link
                 href="/projects"
@@ -941,23 +942,14 @@ export default function HomePortal() {
                       "icon-spew 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.04s both",
                   } as React.CSSProperties
                 }
-                className="group relative flex flex-col items-center cursor-pointer focus:outline-none"
+                className="group relative flex flex-col items-center gap-2.5 cursor-pointer focus:outline-none"
               >
-                {/* Hover Tooltip */}
-                <div className="pointer-events-none absolute -top-20 left-1/2 -translate-x-1/2 w-52 px-3.5 py-2.5 rounded-xl bg-slate-900/95 backdrop-blur-xl border border-blue-500/40 shadow-2xl shadow-blue-500/20 opacity-0 translate-y-2 scale-95 group-hover:opacity-100 group-hover:translate-y-0 group-hover:scale-100 group-focus-visible:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:scale-100 transition-all duration-200 z-30 text-center">
-                  <p className="text-xs font-bold text-white">Projects</p>
-                  <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">
-                    Templates, live previews, documents &amp; task notepads
-                  </p>
-                  <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 rotate-45 bg-slate-900 border-r border-b border-blue-500/40" />
-                </div>
-
                 {/* Pop Icon Button */}
                 <div
                   style={{
                     transform: "rotateX(var(--rx)) rotateY(var(--ry))",
                   }}
-                  className="relative overflow-hidden w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-blue-950/70 backdrop-blur-xl border border-blue-500/35 group-hover:bg-blue-600 group-hover:border-blue-400 flex items-center justify-center text-3xl sm:text-4xl shadow-2xl group-hover:shadow-blue-500/40 group-hover:-translate-y-3 group-hover:scale-110 active:scale-95 transition-all duration-300 ease-out"
+                  className="relative overflow-hidden w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-blue-950/70 backdrop-blur-xl border border-blue-500/35 group-hover:bg-blue-600 group-hover:border-blue-400 flex items-center justify-center text-3xl sm:text-4xl shadow-2xl group-hover:shadow-blue-500/40 group-hover:-translate-y-2.5 group-hover:scale-110 active:scale-95 transition-all duration-300 ease-out"
                 >
                   <span
                     className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
@@ -968,6 +960,9 @@ export default function HomePortal() {
                   />
                   <span className="relative z-10">📁</span>
                 </div>
+                <span className="text-xs sm:text-sm font-semibold text-slate-300 group-hover:text-white transition-colors">
+                  Projects
+                </span>
               </Link>
 
               {/* ICON 2: SUBSCRIPTIONS */}
@@ -985,23 +980,14 @@ export default function HomePortal() {
                       "icon-spew 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.1s both",
                   } as React.CSSProperties
                 }
-                className="group relative flex flex-col items-center cursor-pointer focus:outline-none"
+                className="group relative flex flex-col items-center gap-2.5 cursor-pointer focus:outline-none"
               >
-                {/* Hover Tooltip */}
-                <div className="pointer-events-none absolute -top-20 left-1/2 -translate-x-1/2 w-52 px-3.5 py-2.5 rounded-xl bg-slate-900/95 backdrop-blur-xl border border-indigo-500/40 shadow-2xl shadow-indigo-500/20 opacity-0 translate-y-2 scale-95 group-hover:opacity-100 group-hover:translate-y-0 group-hover:scale-100 group-focus-visible:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:scale-100 transition-all duration-200 z-30 text-center">
-                  <p className="text-xs font-bold text-white">Subscriptions</p>
-                  <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">
-                    Track renewal dates, countdowns &amp; monthly PKR costs
-                  </p>
-                  <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 rotate-45 bg-slate-900 border-r border-b border-indigo-500/40" />
-                </div>
-
                 {/* Pop Icon Button */}
                 <div
                   style={{
                     transform: "rotateX(var(--rx)) rotateY(var(--ry))",
                   }}
-                  className="relative overflow-hidden w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-indigo-950/70 backdrop-blur-xl border border-indigo-500/35 group-hover:bg-indigo-600 group-hover:border-indigo-400 flex items-center justify-center text-3xl sm:text-4xl shadow-2xl group-hover:shadow-indigo-500/40 group-hover:-translate-y-3 group-hover:scale-110 active:scale-95 transition-all duration-300 ease-out"
+                  className="relative overflow-hidden w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-indigo-950/70 backdrop-blur-xl border border-indigo-500/35 group-hover:bg-indigo-600 group-hover:border-indigo-400 flex items-center justify-center text-3xl sm:text-4xl shadow-2xl group-hover:shadow-indigo-500/40 group-hover:-translate-y-2.5 group-hover:scale-110 active:scale-95 transition-all duration-300 ease-out"
                 >
                   <span
                     className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
@@ -1012,6 +998,9 @@ export default function HomePortal() {
                   />
                   <span className="relative z-10">⏱️</span>
                 </div>
+                <span className="text-xs sm:text-sm font-semibold text-slate-300 group-hover:text-white transition-colors">
+                  Subscriptions
+                </span>
               </Link>
 
               {/* ICON 3: PASSWORD MANAGER */}
@@ -1029,23 +1018,14 @@ export default function HomePortal() {
                       "icon-spew 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.16s both",
                   } as React.CSSProperties
                 }
-                className="group relative flex flex-col items-center cursor-pointer focus:outline-none"
+                className="group relative flex flex-col items-center gap-2.5 cursor-pointer focus:outline-none"
               >
-                {/* Hover Tooltip */}
-                <div className="pointer-events-none absolute -top-20 left-1/2 -translate-x-1/2 w-52 px-3.5 py-2.5 rounded-xl bg-slate-900/95 backdrop-blur-xl border border-amber-500/40 shadow-2xl shadow-amber-500/20 opacity-0 translate-y-2 scale-95 group-hover:opacity-100 group-hover:translate-y-0 group-hover:scale-100 group-focus-visible:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:scale-100 transition-all duration-200 z-30 text-center">
-                  <p className="text-xs font-bold text-white">Password Manager</p>
-                  <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">
-                    Store project credentials, URLs &amp; 1-click passwords
-                  </p>
-                  <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 rotate-45 bg-slate-900 border-r border-b border-amber-500/40" />
-                </div>
-
                 {/* Pop Icon Button */}
                 <div
                   style={{
                     transform: "rotateX(var(--rx)) rotateY(var(--ry))",
                   }}
-                  className="relative overflow-hidden w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-amber-950/70 backdrop-blur-xl border border-amber-500/35 group-hover:bg-amber-600 group-hover:border-amber-400 flex items-center justify-center text-3xl sm:text-4xl shadow-2xl group-hover:shadow-amber-500/40 group-hover:-translate-y-3 group-hover:scale-110 active:scale-95 transition-all duration-300 ease-out"
+                  className="relative overflow-hidden w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-amber-950/70 backdrop-blur-xl border border-amber-500/35 group-hover:bg-amber-600 group-hover:border-amber-400 flex items-center justify-center text-3xl sm:text-4xl shadow-2xl group-hover:shadow-amber-500/40 group-hover:-translate-y-2.5 group-hover:scale-110 active:scale-95 transition-all duration-300 ease-out"
                 >
                   <span
                     className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
@@ -1056,6 +1036,9 @@ export default function HomePortal() {
                   />
                   <span className="relative z-10">🔑</span>
                 </div>
+                <span className="text-xs sm:text-sm font-semibold text-slate-300 group-hover:text-white transition-colors">
+                  Password Manager
+                </span>
               </Link>
 
               {/* ICON 4: PROMPT SAVER */}
@@ -1073,23 +1056,14 @@ export default function HomePortal() {
                       "icon-spew 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.22s both",
                   } as React.CSSProperties
                 }
-                className="group relative flex flex-col items-center cursor-pointer focus:outline-none"
+                className="group relative flex flex-col items-center gap-2.5 cursor-pointer focus:outline-none"
               >
-                {/* Hover Tooltip */}
-                <div className="pointer-events-none absolute -top-20 left-1/2 -translate-x-1/2 w-52 px-3.5 py-2.5 rounded-xl bg-slate-900/95 backdrop-blur-xl border border-purple-500/40 shadow-2xl shadow-purple-500/20 opacity-0 translate-y-2 scale-95 group-hover:opacity-100 group-hover:translate-y-0 group-hover:scale-100 group-focus-visible:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:scale-100 transition-all duration-200 z-30 text-center">
-                  <p className="text-xs font-bold text-white">Prompt Saver</p>
-                  <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">
-                    Save &amp; organize AI prompts with 1-click copy
-                  </p>
-                  <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 rotate-45 bg-slate-900 border-r border-b border-purple-500/40" />
-                </div>
-
                 {/* Pop Icon Button */}
                 <div
                   style={{
                     transform: "rotateX(var(--rx)) rotateY(var(--ry))",
                   }}
-                  className="relative overflow-hidden w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-purple-950/70 backdrop-blur-xl border border-purple-500/35 group-hover:bg-purple-600 group-hover:border-purple-400 flex items-center justify-center text-3xl sm:text-4xl shadow-2xl group-hover:shadow-purple-500/40 group-hover:-translate-y-3 group-hover:scale-110 active:scale-95 transition-all duration-300 ease-out"
+                  className="relative overflow-hidden w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-purple-950/70 backdrop-blur-xl border border-purple-500/35 group-hover:bg-purple-600 group-hover:border-purple-400 flex items-center justify-center text-3xl sm:text-4xl shadow-2xl group-hover:shadow-purple-500/40 group-hover:-translate-y-2.5 group-hover:scale-110 active:scale-95 transition-all duration-300 ease-out"
                 >
                   <span
                     className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
@@ -1100,6 +1074,9 @@ export default function HomePortal() {
                   />
                   <span className="relative z-10">💡</span>
                 </div>
+                <span className="text-xs sm:text-sm font-semibold text-slate-300 group-hover:text-white transition-colors">
+                  Prompt Saver
+                </span>
               </Link>
 
               {/* ICON 5: COMMANDS */}
@@ -1117,23 +1094,14 @@ export default function HomePortal() {
                       "icon-spew 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.28s both",
                   } as React.CSSProperties
                 }
-                className="group relative flex flex-col items-center cursor-pointer focus:outline-none"
+                className="group relative flex flex-col items-center gap-2.5 cursor-pointer focus:outline-none"
               >
-                {/* Hover Tooltip */}
-                <div className="pointer-events-none absolute -top-20 left-1/2 -translate-x-1/2 w-52 px-3.5 py-2.5 rounded-xl bg-slate-900/95 backdrop-blur-xl border border-emerald-500/40 shadow-2xl shadow-emerald-500/20 opacity-0 translate-y-2 scale-95 group-hover:opacity-100 group-hover:translate-y-0 group-hover:scale-100 group-focus-visible:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:scale-100 transition-all duration-200 z-30 text-center">
-                  <p className="text-xs font-bold text-white">Commands</p>
-                  <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">
-                    CLI vault for GitHub, npm, Linux &amp; custom commands
-                  </p>
-                  <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 rotate-45 bg-slate-900 border-r border-b border-emerald-500/40" />
-                </div>
-
                 {/* Pop Icon Button */}
                 <div
                   style={{
                     transform: "rotateX(var(--rx)) rotateY(var(--ry))",
                   }}
-                  className="relative overflow-hidden w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-emerald-950/70 backdrop-blur-xl border border-emerald-500/35 group-hover:bg-emerald-600 group-hover:border-emerald-400 flex items-center justify-center text-2xl sm:text-3xl font-mono font-black text-emerald-400 group-hover:text-white shadow-2xl group-hover:shadow-emerald-500/40 group-hover:-translate-y-3 group-hover:scale-110 active:scale-95 transition-all duration-300 ease-out"
+                  className="relative overflow-hidden w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-emerald-950/70 backdrop-blur-xl border border-emerald-500/35 group-hover:bg-emerald-600 group-hover:border-emerald-400 flex items-center justify-center text-2xl sm:text-3xl font-mono font-black text-emerald-400 group-hover:text-white shadow-2xl group-hover:shadow-emerald-500/40 group-hover:-translate-y-2.5 group-hover:scale-110 active:scale-95 transition-all duration-300 ease-out"
                 >
                   <span
                     className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
@@ -1144,6 +1112,47 @@ export default function HomePortal() {
                   />
                   <span className="relative z-10">&gt;_</span>
                 </div>
+                <span className="text-xs sm:text-sm font-semibold text-slate-300 group-hover:text-white transition-colors">
+                  Commands
+                </span>
+              </Link>
+
+              {/* ICON 6: MONTHLY EXPENSE */}
+              <Link
+                href="/expenses"
+                aria-label="Monthly Expense"
+                onMouseEnter={() => setActiveAccent("teal")}
+                onMouseMove={handleIconMouseMove}
+                onMouseLeave={handleIconMouseLeave}
+                style={
+                  {
+                    "--rx": "0deg",
+                    "--ry": "0deg",
+                    animation:
+                      "icon-spew 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.34s both",
+                  } as React.CSSProperties
+                }
+                className="group relative flex flex-col items-center gap-2.5 cursor-pointer focus:outline-none"
+              >
+                {/* Pop Icon Button */}
+                <div
+                  style={{
+                    transform: "rotateX(var(--rx)) rotateY(var(--ry))",
+                  }}
+                  className="relative overflow-hidden w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-teal-950/70 backdrop-blur-xl border border-teal-500/35 group-hover:bg-teal-600 group-hover:border-teal-400 flex items-center justify-center text-3xl sm:text-4xl shadow-2xl group-hover:shadow-teal-500/40 group-hover:-translate-y-2.5 group-hover:scale-110 active:scale-95 transition-all duration-300 ease-out"
+                >
+                  <span
+                    className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                    style={{
+                      background:
+                        "radial-gradient(64px circle at var(--ix, 50%) var(--iy, 50%), rgba(255,255,255,0.28), transparent 70%)",
+                    }}
+                  />
+                  <span className="relative z-10">🧾</span>
+                </div>
+                <span className="text-xs sm:text-sm font-semibold text-slate-300 group-hover:text-white transition-colors">
+                  Monthly Expense
+                </span>
               </Link>
             </div>
           </div>
