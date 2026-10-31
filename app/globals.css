@@ -1,6 +1,53 @@
 @import "tailwindcss";
 
 /* ===================================================
+   REFINED OBSIDIAN & GRAPHITE SURFACE PALETTE
+   Gives the entire workspace a crisp Linear/Raycast-inspired
+   depth and cleaner border hierarchy without breaking classes
+   =================================================== */
+:root {
+  --color-slate-950: #08090e;
+  --color-slate-900: #10131c;
+  --color-slate-800: #1c2130;
+  --color-slate-700: #2a3146;
+}
+
+html,
+body {
+  background-color: #08090e;
+  color: #f3f4f6;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Custom sleek scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.18);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.32);
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* ===================================================
    DYNAMIC THEME SYSTEM
    Overrides Tailwind's --color-blue-* scale based on
    data-theme attribute on documentElement (HTML root)

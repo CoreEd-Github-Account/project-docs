@@ -1,37 +1,28 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import Link from "next/link";
 import { LoginForm } from "@/components/LoginForm";
-import { NotificationBell } from "@/components/NotificationBell";
-
+import { WorkspaceHeader } from "@/components/WorkspaceHeader";
 import type { PasswordItem } from "@/lib/types";
 export type { PasswordItem };
 
 export default function PasswordManagerPage() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [passwords, setPasswords] = useState<PasswordItem[]>([]);
-  const [isLoaded, setIsLoaded] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Visible passwords map: id -> boolean (masked vs revealed)
   const [visibleMap, setVisibleMap] = useState<Record<string, boolean>>({});
-
-  // Copy feedback state: { id, field: 'id' | 'password' }
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
 
-  // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  // Form Fields
   const [formProjectName, setFormProjectName] = useState("");
   const [formUrl, setFormUrl] = useState("");
   const [formIdentifier, setFormIdentifier] = useState("");
   const [formPassword, setFormPassword] = useState("");
   const [showFormPassword, setShowFormPassword] = useState(true);
 
-  // 1. Check Authentication Status
   const checkAuth = useCallback(async () => {
     try {
       const res = await fetch("/api/auth");
@@ -46,7 +37,6 @@ export default function PasswordManagerPage() {
     checkAuth();
   }, [checkAuth]);
 
-  // Handle Logout
   const handleLogout = async () => {
     try {
       await fetch("/api/auth", { method: "DELETE" });
@@ -63,7 +53,6 @@ export default function PasswordManagerPage() {
     "saved"
   );
 
-  // Fetch passwords from database API
   const fetchPasswords = useCallback(async () => {
     try {
       setIsLoading(true);
@@ -77,11 +66,10 @@ export default function PasswordManagerPage() {
       setPasswords(data);
       setSaveStatus("saved");
     } catch (err) {
-      console.error("Error loading passwords from Supabase:", err);
+      console.error("Error loading passwords:", err);
       setSaveStatus("error");
     } finally {
       setIsLoading(false);
-      setIsLoaded(true);
     }
   }, []);
 
@@ -91,7 +79,6 @@ export default function PasswordManagerPage() {
     }
   }, [isAuthenticated, fetchPasswords]);
 
-  // Open modal to add new password
   const handleOpenAdd = () => {
     setEditingId(null);
     setFormProjectName("");
@@ -102,7 +89,6 @@ export default function PasswordManagerPage() {
     setIsModalOpen(true);
   };
 
-  // Open modal to edit existing password
   const handleOpenEdit = (item: PasswordItem) => {
     setEditingId(item.id);
     setFormProjectName(item.projectName);
@@ -113,10 +99,10 @@ export default function PasswordManagerPage() {
     setIsModalOpen(true);
   };
 
-  // Save (Add or Update) via API
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formProjectName.trim() || !formIdentifier.trim() || !formPassword) return;
+    if (!formProjectName.trim() || !formIdentifier.trim() || !formPassword)
+      return;
 
     const idToUse = editingId || `pwd-${Date.now()}`;
     const item: PasswordItem = {
@@ -154,9 +140,8 @@ export default function PasswordManagerPage() {
     }
   };
 
-  // Delete via API
   const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`Delete password for "${name}" from database?`)) return;
+    if (!confirm(`Delete credentials for "${name}"?`)) return;
 
     setSaveStatus("saving");
     try {
@@ -175,21 +160,18 @@ export default function PasswordManagerPage() {
     }
   };
 
-  // Toggle mask/reveal for individual password
   const toggleVisibility = (id: string) => {
     setVisibleMap((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  // 1-Click Clipboard copy helper
   const handleCopyText = (text: string, feedbackKey: string) => {
     navigator.clipboard.writeText(text);
     setCopyFeedback(feedbackKey);
     setTimeout(() => {
       setCopyFeedback((prev) => (prev === feedbackKey ? null : prev));
-    }, 2000);
+    }, 1800);
   };
 
-  // Filtered Passwords List
   const filteredPasswords = useMemo(() => {
     if (!searchQuery.trim()) return passwords;
     const q = searchQuery.toLowerCase();
@@ -201,17 +183,14 @@ export default function PasswordManagerPage() {
     );
   }, [passwords, searchQuery]);
 
-  // Auth Loading state
   if (isAuthenticated === null) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-400">
-        <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-3"></div>
-        <p className="text-sm font-medium">Verifying access...</p>
+      <div className="min-h-screen bg-[#07090e] flex flex-col items-center justify-center text-slate-400">
+        <div className="w-7 h-7 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
-  // Unauthenticated -> Show Login Form
   if (!isAuthenticated) {
     return (
       <LoginForm
@@ -223,135 +202,81 @@ export default function PasswordManagerPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col">
-      {/* Top Header */}
-      <header className="bg-slate-900/90 border-b border-slate-800 sticky top-0 z-10 backdrop-blur-md">
-        <div className="max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center font-bold text-white text-sm shadow-md shadow-blue-600/20">
-              P
-            </div>
-            <div>
-              <h1 className="text-base font-bold text-white leading-tight">
-                Password Manager
-              </h1>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                <span className="text-[11px] text-slate-400">
-                  Supabase PG: {saveStatus === "saving" ? "Saving..." : saveStatus === "error" ? "Sync Error" : "Synced"}
-                </span>
-              </div>
-            </div>
-          </div>
+    <div className="min-h-screen bg-[#07090e] text-slate-100 font-sans flex flex-col">
+      <WorkspaceHeader
+        title="Passwords"
+        icon="🔑"
+        saveStatus={saveStatus}
+        primaryAction={{
+          label: "Add Password",
+          onClick: handleOpenAdd,
+          icon: "+",
+        }}
+        onLogout={handleLogout}
+      />
 
-          <div className="flex items-center gap-2">
-            <Link
-              href="/"
-              className="text-xs text-slate-300 hover:text-white px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800/60 hover:bg-slate-800 transition"
-              title="Home Hub"
-            >
-              ← Hub
-            </Link>
-            <Link
-              href="/projects"
-              className="text-xs text-slate-300 hover:text-white px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800/60 hover:bg-slate-800 transition"
-              title="Projects"
-            >
-              Projects
-            </Link>
-            <Link
-              href="/subscriptions"
-              className="text-xs text-slate-300 hover:text-white px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800/60 hover:bg-slate-800 transition"
-              title="Subscriptions"
-            >
-              Subscriptions
-            </Link>
-            <Link
-              href="/prompts"
-              className="text-xs text-slate-300 hover:text-white px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800/60 hover:bg-slate-800 transition"
-              title="Prompt Saver"
-            >
-              Prompts
-            </Link>
-            <button
-              onClick={handleOpenAdd}
-              className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-medium transition cursor-pointer shadow-sm shadow-blue-600/30"
-            >
-              + Add Password
-            </button>
-            <NotificationBell />
-            <Link
-              href="/settings"
-              className="p-1.5 rounded-lg border border-slate-700 bg-slate-800/60 hover:bg-slate-800 text-slate-300 hover:text-white transition flex items-center justify-center"
-              title="Settings & Theme Selector"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-            </Link>
-            <button
-              onClick={handleLogout}
-              className="text-xs text-red-400 hover:text-red-300 bg-red-950/30 hover:bg-red-950/60 px-2.5 py-1.5 rounded-lg border border-red-500/30 transition cursor-pointer"
-              title="Log Out"
-            >
-              Logout
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="flex-1 max-w-4xl w-full mx-auto p-4 sm:p-6 space-y-4">
-        {/* Search & Stats Bar */}
-        <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="relative flex-1">
-            <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500 text-xs pointer-events-none">
-              🔍
+      <main className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 py-8 space-y-5">
+        {/* Minimal Single-Row Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-xl font-bold text-white tracking-tight">
+              Passwords
+            </h1>
+            <span className="text-xs font-mono font-semibold text-slate-400 bg-[#10131c] border border-white/[0.07] px-2.5 py-0.5 rounded-lg">
+              {passwords.length}
             </span>
+          </div>
+
+          <div className="relative w-full sm:w-72">
+            <svg
+              className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+              />
+            </svg>
             <input
               type="text"
-              placeholder="Search by project name, ID, or URL..."
+              placeholder="Search credentials..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-8 pr-8 py-2 text-xs bg-slate-950 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+              className="w-full bg-[#10131c] border border-white/[0.07] focus:border-orange-500/60 pl-8 pr-7 py-1.5 rounded-xl text-xs text-slate-100 placeholder-slate-500 focus:outline-none transition"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery("")}
-                className="absolute inset-y-0 right-0 pr-3 flex items-center text-xs text-slate-400 hover:text-white cursor-pointer"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white text-xs cursor-pointer"
               >
                 ✕
               </button>
             )}
           </div>
-
-          <div className="text-xs text-slate-400 font-medium shrink-0 flex items-center gap-2">
-            <span>Saved Credentials:</span>
-            <span className="font-bold text-white bg-slate-800 px-2.5 py-0.5 rounded border border-slate-700">
-              {passwords.length}
-            </span>
-          </div>
         </div>
 
-        {/* Passwords List */}
+        {/* Unified Credentials Ledger */}
         {isLoading ? (
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-12 text-center text-slate-400">
-            <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-            <p className="text-sm font-medium">Loading credentials from Supabase PG...</p>
+          <div className="rounded-2xl bg-[#0d1017] border border-white/[0.07] p-12 text-center text-slate-400">
+            <div className="w-6 h-6 border-2 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto mb-2.5" />
+            <p className="text-xs">Loading credentials...</p>
           </div>
         ) : filteredPasswords.length === 0 ? (
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-8 text-center text-slate-400">
-            <p className="text-sm font-medium">No credentials found in database.</p>
+          <div className="rounded-2xl bg-[#0d1017] border border-white/[0.07] p-12 text-center space-y-3">
+            <p className="text-sm text-slate-400">No credentials found.</p>
             <button
               onClick={handleOpenAdd}
-              className="mt-3 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-lg cursor-pointer shadow-sm shadow-blue-600/30"
+              className="px-4 py-2 bg-orange-500 hover:bg-orange-400 text-white text-xs font-semibold rounded-xl transition cursor-pointer"
             >
               + Add Password
             </button>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="rounded-2xl bg-[#0d1017] border border-white/[0.07] divide-y divide-white/[0.06] overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.6)]">
             {filteredPasswords.map((item) => {
               const isRevealed = Boolean(visibleMap[item.id]);
               const idCopied = copyFeedback === `id-${item.id}`;
@@ -360,104 +285,124 @@ export default function PasswordManagerPage() {
               return (
                 <div
                   key={item.id}
-                  className="bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-xl p-4 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4 transition"
+                  className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-3.5 hover:bg-white/[0.02] transition-colors"
                 >
-                  {/* Left: Project Name & URL */}
-                  <div className="space-y-1 md:max-w-xs w-full">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm">🔑</span>
-                      <h3 className="font-bold text-white text-sm truncate" title={item.projectName}>
+                  {/* Left: Project Monogram + Name + URL */}
+                  <div className="flex items-center gap-3 min-w-0 md:w-56 shrink-0">
+                    <div className="w-9 h-9 rounded-xl bg-[#151926] border border-white/[0.08] flex items-center justify-center text-xs font-bold uppercase text-amber-300 shrink-0">
+                      {item.projectName.slice(0, 2)}
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="font-semibold text-white text-sm truncate">
                         {item.projectName}
                       </h3>
+                      {item.url ? (
+                        <a
+                          href={
+                            item.url.startsWith("http")
+                              ? item.url
+                              : `https://${item.url}`
+                          }
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-slate-400 hover:text-orange-400 truncate block transition-colors"
+                        >
+                          {item.url.replace(/^https?:\/\//, "")} ↗
+                        </a>
+                      ) : (
+                        <span className="text-xs text-slate-500">No URL</span>
+                      )}
                     </div>
-                    {item.url ? (
-                      <a
-                        href={item.url.startsWith("http") ? item.url : `https://${item.url}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-blue-400 hover:text-blue-300 hover:underline block truncate flex items-center gap-1"
-                        title={item.url}
-                      >
-                        <span className="truncate">{item.url}</span>
-                        <span className="text-[10px]">↗</span>
-                      </a>
-                    ) : (
-                      <span className="text-xs text-slate-500 italic">No URL provided</span>
-                    )}
                   </div>
 
-                  {/* Middle: ID & Password Fields */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 flex-1 w-full text-xs">
-                    {/* ID Box */}
-                    <div className="bg-slate-950 border border-slate-800 rounded-lg p-2.5 flex items-center justify-between gap-2">
-                      <div className="truncate">
-                        <span className="text-[10px] text-slate-500 block font-semibold uppercase">
-                          ID / User
-                        </span>
-                        <span className="font-mono text-slate-200 font-medium truncate block select-all">
-                          {item.identifier}
-                        </span>
-                      </div>
+                  {/* Middle: Compact Copyable Pills for Username & Password */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 flex-1 min-w-0">
+                    {/* Username Pill */}
+                    <div className="flex items-center justify-between gap-2 bg-[#07090e] border border-white/[0.07] rounded-xl px-3 py-2">
+                      <span className="font-mono text-xs text-slate-200 truncate select-all">
+                        {item.identifier}
+                      </span>
                       <button
-                        onClick={() => handleCopyText(item.identifier, `id-${item.id}`)}
-                        className={`text-[11px] px-2 py-1 rounded transition shrink-0 font-medium cursor-pointer ${
+                        onClick={() =>
+                          handleCopyText(item.identifier, `id-${item.id}`)
+                        }
+                        className={`text-[11px] font-semibold px-2 py-0.5 rounded-md transition shrink-0 cursor-pointer ${
                           idCopied
-                            ? "bg-emerald-950/70 text-emerald-400 border border-emerald-500/40 font-bold"
-                            : "bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700"
+                            ? "bg-emerald-500/20 text-emerald-300"
+                            : "text-slate-400 hover:text-white bg-white/[0.05]"
                         }`}
-                        title="Copy ID"
                       >
-                        {idCopied ? "Copied! ✓" : "Copy"}
+                        {idCopied ? "✓" : "Copy ID"}
                       </button>
                     </div>
 
-                    {/* Password Box (Plain text) */}
-                    <div className="bg-slate-950 border border-slate-800 rounded-lg p-2.5 flex items-center justify-between gap-2">
-                      <div className="truncate">
-                        <span className="text-[10px] text-slate-500 block font-semibold uppercase">
-                          Password
-                        </span>
-                        <span className="font-mono text-slate-200 font-medium truncate block select-all">
-                          {isRevealed ? item.password : "••••••••••••"}
-                        </span>
-                      </div>
-
+                    {/* Password Pill */}
+                    <div className="flex items-center justify-between gap-2 bg-[#07090e] border border-white/[0.07] rounded-xl px-3 py-2">
+                      <span className="font-mono text-xs text-slate-200 truncate select-all">
+                        {isRevealed ? item.password : "••••••••••"}
+                      </span>
                       <div className="flex items-center gap-1 shrink-0">
                         <button
                           onClick={() => toggleVisibility(item.id)}
-                          className="text-[11px] px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded transition font-medium cursor-pointer"
-                          title={isRevealed ? "Hide Password" : "Show Plain-text Password"}
+                          className="text-[11px] text-slate-400 hover:text-white px-1.5 py-0.5 rounded transition cursor-pointer"
                         >
                           {isRevealed ? "Hide" : "Show"}
                         </button>
                         <button
-                          onClick={() => handleCopyText(item.password, `pwd-${item.id}`)}
-                          className={`text-[11px] px-2 py-1 rounded transition font-medium cursor-pointer ${
+                          onClick={() =>
+                            handleCopyText(item.password, `pwd-${item.id}`)
+                          }
+                          className={`text-[11px] font-semibold px-2 py-0.5 rounded-md transition cursor-pointer ${
                             pwdCopied
-                              ? "bg-emerald-950/70 text-emerald-400 border border-emerald-500/40 font-bold"
-                              : "bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700"
+                              ? "bg-emerald-500/20 text-emerald-300"
+                              : "text-slate-400 hover:text-white bg-white/[0.05]"
                           }`}
-                          title="Copy Password"
                         >
-                          {pwdCopied ? "Copied! ✓" : "Copy"}
+                          {pwdCopied ? "✓" : "Copy"}
                         </button>
                       </div>
                     </div>
                   </div>
 
-                  {/* Right: Actions */}
-                  <div className="flex items-center gap-1.5 pt-2 md:pt-0 border-t md:border-t-0 border-slate-800 justify-end shrink-0">
+                  {/* Right: Edit / Delete Icons */}
+                  <div className="flex items-center justify-end gap-1 shrink-0">
                     <button
                       onClick={() => handleOpenEdit(item)}
-                      className="text-xs text-slate-300 hover:text-white hover:bg-slate-800 px-2.5 py-1.5 rounded-md border border-slate-700 transition cursor-pointer"
+                      title="Edit"
+                      className="w-7 h-7 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] flex items-center justify-center transition cursor-pointer"
                     >
-                      Edit
+                      <svg
+                        className="w-3.5 h-3.5"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="2"
+                          d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                        />
+                      </svg>
                     </button>
                     <button
                       onClick={() => handleDelete(item.id, item.projectName)}
-                      className="text-xs text-red-400 hover:text-red-300 hover:bg-red-950/40 px-2.5 py-1.5 rounded-md border border-red-500/20 transition cursor-pointer"
+                      title="Delete"
+                      className="w-7 h-7 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 flex items-center justify-center transition cursor-pointer"
                     >
-                      Delete
+                      <svg
+                        className="w-3.5 h-3.5"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="2"
+                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                        />
+                      </svg>
                     </button>
                   </div>
                 </div>
@@ -469,103 +414,104 @@ export default function PasswordManagerPage() {
 
       {/* Add / Edit Password Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-30 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-slate-900 rounded-xl shadow-2xl border border-slate-800 w-full max-w-sm p-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h2 className="text-base font-bold text-white">
-                {editingId ? "Edit Credentials" : "Add Password"}
+        <div
+          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setIsModalOpen(false)}
+        >
+          <div
+            className="bg-[#10131c] rounded-2xl shadow-2xl border border-white/[0.08] w-full max-w-sm p-5 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-white/[0.07] pb-3">
+              <h2 className="text-sm font-bold text-white">
+                {editingId ? "Edit Password" : "Add Password"}
               </h2>
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="text-slate-400 hover:text-white text-sm font-bold cursor-pointer"
+                className="text-slate-400 hover:text-white text-xs cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
             <form onSubmit={handleSave} className="space-y-3.5">
-              {/* 1. Project Name */}
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Project Name *
+                <label className="block text-xs font-medium text-slate-300 mb-1">
+                  Project / Service
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Supabase DB, AWS, Client Admin"
+                  placeholder="e.g. Supabase, AWS, GitHub"
                   value={formProjectName}
                   onChange={(e) => setFormProjectName(e.target.value)}
-                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                  className="w-full px-3 py-2 text-sm bg-[#07090e] border border-white/[0.09] rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-orange-500 transition"
                 />
               </div>
 
-              {/* 2. URL */}
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  URL (Optional)
+                <label className="block text-xs font-medium text-slate-300 mb-1">
+                  URL <span className="text-slate-500">(optional)</span>
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. https://admin.example.com"
+                  placeholder="https://..."
                   value={formUrl}
                   onChange={(e) => setFormUrl(e.target.value)}
-                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                  className="w-full px-3 py-2 text-sm bg-[#07090e] border border-white/[0.09] rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-orange-500 transition"
                 />
               </div>
 
-              {/* 3. ID / Username / Email */}
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  ID / Username / Email *
+                <label className="block text-xs font-medium text-slate-300 mb-1">
+                  Username / Email
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. admin or user@company.com"
+                  placeholder="admin@example.com"
                   value={formIdentifier}
                   onChange={(e) => setFormIdentifier(e.target.value)}
-                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                  className="w-full px-3 py-2 text-sm bg-[#07090e] border border-white/[0.09] rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-orange-500 transition"
                 />
               </div>
 
-              {/* 4. Password (Plain text) */}
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-semibold text-slate-300">
-                    Password (Plain Text) *
+                  <label className="block text-xs font-medium text-slate-300">
+                    Password
                   </label>
                   <button
                     type="button"
                     onClick={() => setShowFormPassword(!showFormPassword)}
-                    className="text-[11px] text-blue-400 hover:text-blue-300 cursor-pointer"
+                    className="text-[11px] text-orange-400 hover:text-orange-300 cursor-pointer"
                   >
-                    {showFormPassword ? "Mask" : "Show"}
+                    {showFormPassword ? "Hide" : "Show"}
                   </button>
                 </div>
                 <input
                   type={showFormPassword ? "text" : "password"}
                   required
-                  placeholder="Enter plain text password"
+                  placeholder="Password"
                   value={formPassword}
                   onChange={(e) => setFormPassword(e.target.value)}
-                  className="w-full px-3 py-2 text-sm font-mono bg-slate-950 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                  className="w-full px-3 py-2 text-sm font-mono bg-[#07090e] border border-white/[0.09] rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-orange-500 transition"
                 />
               </div>
 
-              {/* Modal Buttons */}
-              <div className="pt-3 flex items-center justify-end gap-2 border-t border-slate-800">
+              <div className="pt-2 flex items-center justify-end gap-2 border-t border-white/[0.07]">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition cursor-pointer"
+                  className="px-3.5 py-1.5 text-xs font-medium text-slate-400 hover:text-white rounded-lg transition cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-lg shadow-sm shadow-blue-600/30 transition cursor-pointer"
+                  className="px-4 py-1.5 text-xs font-semibold text-white bg-orange-500 hover:bg-orange-400 rounded-lg transition cursor-pointer"
                 >
-                  {editingId ? "Save Changes" : "Save Password"}
+                  {editingId ? "Save" : "Add Password"}
                 </button>
               </div>
             </form>

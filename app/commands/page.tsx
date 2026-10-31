@@ -1,9 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import Link from "next/link";
 import { LoginForm } from "@/components/LoginForm";
-import { NotificationBell } from "@/components/NotificationBell";
+import { WorkspaceHeader } from "@/components/WorkspaceHeader";
 import type { SavedCommand } from "@/lib/types";
 
 interface CategoryMeta {
@@ -20,84 +19,76 @@ interface CategoryMeta {
 const DEFAULT_CATEGORIES: CategoryMeta[] = [
   {
     id: "github",
-    label: "Git & GitHub",
+    label: "Git",
     promptPrefix: "git",
-    badgeClass: "bg-orange-950/60 text-orange-300 border-orange-500/30",
+    badgeClass: "bg-orange-500/10 text-orange-300 border-orange-500/25",
     dotClass: "bg-orange-400",
     placeholderCmd: "git log --oneline --graph --decorate --all",
-    placeholderTitle: "Shows a clean ASCII branch graph of all commits across branches.",
+    placeholderTitle: "Shows a clean branch graph of all commits.",
   },
   {
     id: "npm",
-    label: "npm & Node",
+    label: "npm",
     promptPrefix: "npm",
-    badgeClass: "bg-rose-950/60 text-rose-300 border-rose-500/30",
+    badgeClass: "bg-rose-500/10 text-rose-300 border-rose-500/25",
     dotClass: "bg-rose-400",
     placeholderCmd: "npm outdated --depth=0",
-    placeholderTitle: "Lists direct dependencies that have newer versions available on the registry.",
+    placeholderTitle: "Lists direct dependencies with newer versions.",
   },
   {
     id: "linux",
-    label: "Linux & Shell",
+    label: "Linux",
     promptPrefix: "sh",
-    badgeClass: "bg-emerald-950/60 text-emerald-300 border-emerald-500/30",
+    badgeClass: "bg-emerald-500/10 text-emerald-300 border-emerald-500/25",
     dotClass: "bg-emerald-400",
     placeholderCmd: "lsof -i :3000",
-    placeholderTitle: "Shows the PID and process name listening on TCP port 3000 so you can free it.",
+    placeholderTitle: "Shows the process listening on port 3000.",
   },
   {
     id: "docker",
-    label: "Docker & Infra",
+    label: "Docker",
     promptPrefix: "docker",
-    badgeClass: "bg-sky-950/60 text-sky-300 border-sky-500/30",
+    badgeClass: "bg-sky-500/10 text-sky-300 border-sky-500/25",
     dotClass: "bg-sky-400",
     placeholderCmd: "docker system prune -af --volumes",
-    placeholderTitle: "Removes stopped containers, unused networks, dangling images, and volumes.",
+    placeholderTitle: "Removes stopped containers, networks, and dangling images.",
   },
   {
     id: "database",
-    label: "Database & SQL",
+    label: "SQL",
     promptPrefix: "sql",
-    badgeClass: "bg-indigo-950/60 text-indigo-300 border-indigo-500/30",
+    badgeClass: "bg-indigo-500/10 text-indigo-300 border-indigo-500/25",
     dotClass: "bg-indigo-400",
-    placeholderCmd: "pg_dump -Fc --no-acl --no-owner -h localhost -U postgres mydb > mydb.dump",
-    placeholderTitle: "Creates a portable custom-format backup ready for pg_restore.",
+    placeholderCmd: "pg_dump -Fc --no-acl --no-owner mydb > mydb.dump",
+    placeholderTitle: "Creates a portable Postgres backup.",
   },
   {
     id: "other",
-    label: "General CLI",
+    label: "CLI",
     promptPrefix: "cli",
-    badgeClass: "bg-slate-800 text-slate-300 border-slate-700",
+    badgeClass: "bg-white/[0.05] text-slate-300 border-white/[0.1]",
     dotClass: "bg-slate-400",
     placeholderCmd: "ssh -i ~/.ssh/id_ed25519 user@server-ip",
-    placeholderTitle: "Opens an authenticated SSH session using your ed25519 private key.",
+    placeholderTitle: "Opens an SSH session using ed25519 key.",
   },
 ];
 
 const CUSTOM_PALETTES = [
   {
-    badgeClass: "bg-teal-950/60 text-teal-300 border-teal-500/30",
+    badgeClass: "bg-teal-500/10 text-teal-300 border-teal-500/25",
     dotClass: "bg-teal-400",
   },
   {
-    badgeClass: "bg-purple-950/60 text-purple-300 border-purple-500/30",
+    badgeClass: "bg-purple-500/10 text-purple-300 border-purple-500/25",
     dotClass: "bg-purple-400",
   },
   {
-    badgeClass: "bg-amber-950/60 text-amber-300 border-amber-500/30",
+    badgeClass: "bg-amber-500/10 text-amber-300 border-amber-500/25",
     dotClass: "bg-amber-400",
   },
   {
-    badgeClass: "bg-cyan-950/60 text-cyan-300 border-cyan-500/30",
+    badgeClass: "bg-cyan-500/10 text-cyan-300 border-cyan-500/25",
     dotClass: "bg-cyan-400",
-  },
-  {
-    badgeClass: "bg-pink-950/60 text-pink-300 border-pink-500/30",
-    dotClass: "bg-pink-400",
-  },
-  {
-    badgeClass: "bg-blue-950/60 text-blue-300 border-blue-500/30",
-    dotClass: "bg-blue-400",
   },
 ];
 
@@ -120,9 +111,14 @@ function buildCustomCategoryMeta(rawName: string): CategoryMeta {
   };
 }
 
-function resolveCategoryMeta(catId?: string, allCategories: CategoryMeta[] = DEFAULT_CATEGORIES): CategoryMeta {
+function resolveCategoryMeta(
+  catId?: string,
+  allCategories: CategoryMeta[] = DEFAULT_CATEGORIES
+): CategoryMeta {
   if (!catId) return DEFAULT_CATEGORIES[0];
-  const found = allCategories.find((c) => c.id.toLowerCase() === catId.toLowerCase());
+  const found = allCategories.find(
+    (c) => c.id.toLowerCase() === catId.toLowerCase()
+  );
   if (found) return found;
   return buildCustomCategoryMeta(catId);
 }
@@ -141,7 +137,7 @@ const STARTER_COMMANDS: Array<Omit<SavedCommand, "id" | "createdAt">> = [
     isPinned: false,
   },
   {
-    title: "Find and kill process running on port 3000 (Linux / macOS)",
+    title: "Find and kill process running on port 3000",
     command: "kill -9 $(lsof -t -i:3000)",
     category: "linux",
     isPinned: true,
@@ -160,14 +156,13 @@ const STARTER_COMMANDS: Array<Omit<SavedCommand, "id" | "createdAt">> = [
   },
 ];
 
-// Highlight CLI flags (-f, --flag), operators (&&, |, >), and strings for instant terminal legibility
 function renderHighlightedCommand(raw: string): React.ReactNode {
   const lines = raw.split("\n");
   return lines.map((line, lineIdx) => {
     const tokens = line.split(/(\s+)/);
     return (
       <div key={lineIdx} className="leading-relaxed">
-        <span className="text-emerald-500 select-none mr-2.5 font-bold">$</span>
+        <span className="text-emerald-400 select-none mr-2 font-bold">$</span>
         {tokens.map((token, idx) => {
           if (/^\s+$/.test(token)) {
             return <span key={idx}>{token}</span>;
@@ -220,37 +215,36 @@ export default function CommandsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<string>("all");
-  const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "error">("saved");
+  const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "error">(
+    "saved"
+  );
   const [isSeeding, setIsSeeding] = useState(false);
 
-  // Copy state
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  // Form Fields
   const [formTitle, setFormTitle] = useState("");
   const [formCommand, setFormCommand] = useState("");
   const [formCategory, setFormCategory] = useState<string>("github");
   const [formPinned, setFormPinned] = useState(false);
 
-  // Custom Environment Creation State inside Modal / Filter Bar
   const [isAddingCustomEnv, setIsAddingCustomEnv] = useState(false);
   const [customEnvInput, setCustomEnvInput] = useState("");
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const customEnvInputRef = useRef<HTMLInputElement>(null);
 
-  // Load saved custom environments from localStorage on mount
   useEffect(() => {
     try {
       const raw = localStorage.getItem(CUSTOM_ENVS_STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
-          setCustomEnvs(parsed.filter((x) => typeof x === "string" && x.trim()));
+          setCustomEnvs(
+            parsed.filter((x) => typeof x === "string" && x.trim())
+          );
         }
       }
     } catch {}
@@ -260,7 +254,9 @@ export default function CommandsPage() {
     const clean = envName.trim();
     if (!clean) return;
     const isDefault = DEFAULT_CATEGORIES.some(
-      (d) => d.id.toLowerCase() === clean.toLowerCase() || d.label.toLowerCase() === clean.toLowerCase()
+      (d) =>
+        d.id.toLowerCase() === clean.toLowerCase() ||
+        d.label.toLowerCase() === clean.toLowerCase()
     );
     if (isDefault) return;
 
@@ -274,7 +270,6 @@ export default function CommandsPage() {
     });
   }, []);
 
-  // Merge default categories + custom environments from both saved commands and user-created customEnvs
   const allCategories = useMemo<CategoryMeta[]>(() => {
     const list: CategoryMeta[] = [...DEFAULT_CATEGORIES];
     const seen = new Set(DEFAULT_CATEGORIES.map((c) => c.id.toLowerCase()));
@@ -299,7 +294,6 @@ export default function CommandsPage() {
     return list;
   }, [customEnvs, commands]);
 
-  // Check auth
   const checkAuth = useCallback(async () => {
     try {
       const res = await fetch("/api/auth");
@@ -314,7 +308,6 @@ export default function CommandsPage() {
     checkAuth();
   }, [checkAuth]);
 
-  // Press "/" anywhere outside an input to focus the command search bar
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
@@ -331,7 +324,6 @@ export default function CommandsPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isModalOpen]);
 
-  // Load commands from database
   const loadCommands = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -364,13 +356,14 @@ export default function CommandsPage() {
     }
   };
 
-  // Open modal for new command
   const handleOpenAdd = (defaultCat?: string) => {
     setEditingId(null);
     setFormTitle("");
     setFormCommand("");
     setFormCategory(
-      defaultCat && defaultCat !== "all" && defaultCat !== "pinned" ? defaultCat : "github"
+      defaultCat && defaultCat !== "all" && defaultCat !== "pinned"
+        ? defaultCat
+        : "github"
     );
     setFormPinned(false);
     setIsAddingCustomEnv(false);
@@ -378,7 +371,6 @@ export default function CommandsPage() {
     setIsModalOpen(true);
   };
 
-  // Open modal for editing
   const handleOpenEdit = (item: SavedCommand) => {
     setEditingId(item.id);
     setFormTitle(item.title || "");
@@ -390,13 +382,13 @@ export default function CommandsPage() {
     setIsModalOpen(true);
   };
 
-  // Confirm adding a custom environment inside the modal
   const handleConfirmCustomEnv = () => {
     const clean = customEnvInput.trim();
     if (!clean) return;
-    // Check if matches an existing category
     const existing = allCategories.find(
-      (c) => c.id.toLowerCase() === clean.toLowerCase() || c.label.toLowerCase() === clean.toLowerCase()
+      (c) =>
+        c.id.toLowerCase() === clean.toLowerCase() ||
+        c.label.toLowerCase() === clean.toLowerCase()
     );
     if (existing) {
       setFormCategory(existing.id);
@@ -408,11 +400,12 @@ export default function CommandsPage() {
     setIsAddingCustomEnv(false);
   };
 
-  // Delete a custom environment pill if no commands use it (or remove from saved list)
   const handleRemoveCustomEnv = (envId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setCustomEnvs((prev) => {
-      const next = prev.filter((item) => item.toLowerCase() !== envId.toLowerCase());
+      const next = prev.filter(
+        (item) => item.toLowerCase() !== envId.toLowerCase()
+      );
       try {
         localStorage.setItem(CUSTOM_ENVS_STORAGE_KEY, JSON.stringify(next));
       } catch {}
@@ -426,7 +419,6 @@ export default function CommandsPage() {
     }
   };
 
-  // 1-Click Clipboard Copy
   const handleCopyCommand = (id: string, cmdText: string) => {
     if (!cmdText) return;
     navigator.clipboard.writeText(cmdText);
@@ -436,7 +428,6 @@ export default function CommandsPage() {
     }, 1800);
   };
 
-  // Toggle Pin directly from row
   const handleTogglePin = async (item: SavedCommand) => {
     const updatedPin = !item.isPinned;
     setCommands((prev) =>
@@ -457,19 +448,17 @@ export default function CommandsPage() {
     } catch {
       setSaveStatus("error");
       setCommands((prev) =>
-        prev.map((c) => (c.id === item.id ? { ...c, isPinned: item.isPinned } : c))
+        prev.map((c) =>
+          c.id === item.id ? { ...c, isPinned: item.isPinned } : c
+        )
       );
     }
   };
 
-  // Save via API
   const handleSaveCommand = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formCommand.trim()) {
-      return;
-    }
+    if (!formCommand.trim()) return;
 
-    // If user typed a custom environment name in the input box and didn't click "Add" yet, use it automatically
     let finalCategory = formCategory.trim() || "github";
     if (isAddingCustomEnv && customEnvInput.trim()) {
       finalCategory = customEnvInput.trim();
@@ -478,7 +467,9 @@ export default function CommandsPage() {
       persistCustomEnv(finalCategory);
     }
 
-    const idToUse = editingId || `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const idToUse =
+      editingId ||
+      `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const payload: Partial<SavedCommand> = {
       id: idToUse,
       title: formTitle.trim(),
@@ -509,14 +500,13 @@ export default function CommandsPage() {
     } catch (err) {
       console.error("Save command error:", err);
       setSaveStatus("error");
-      alert("Could not save command to the database. Check your connection and try again.");
+      alert("Could not save command to the database.");
     }
   };
 
-  // Delete via API
   const handleDeleteCommand = async (id: string, label?: string) => {
     const display = label?.trim() || "this command";
-    if (!confirm(`Remove "${display}" from your command vault?`)) return;
+    if (!confirm(`Remove "${display}"?`)) return;
 
     setSaveStatus("saving");
     try {
@@ -535,7 +525,6 @@ export default function CommandsPage() {
     }
   };
 
-  // Seed starter commands for new users
   const handleLoadStarterCommands = async () => {
     if (isSeeding) return;
     setIsSeeding(true);
@@ -566,7 +555,6 @@ export default function CommandsPage() {
     }
   };
 
-  // Counts per category
   const counts = useMemo(() => {
     const map: Record<string, number> = {
       all: commands.length,
@@ -580,7 +568,6 @@ export default function CommandsPage() {
     return map;
   }, [commands, allCategories]);
 
-  // Filtered & sorted commands (pinned always float to top)
   const filteredCommands = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
     return commands
@@ -604,7 +591,9 @@ export default function CommandsPage() {
         if (Boolean(a.isPinned) !== Boolean(b.isPinned)) {
           return a.isPinned ? -1 : 1;
         }
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        return (
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
       });
   }, [commands, activeCategory, searchQuery]);
 
@@ -613,17 +602,14 @@ export default function CommandsPage() {
     [formCategory, allCategories]
   );
 
-  // Auth loading state
   if (isAuthenticated === null) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-400">
-        <div className="w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin mb-3"></div>
-        <p className="text-sm font-medium">Verifying access...</p>
+      <div className="min-h-screen bg-[#07090e] flex flex-col items-center justify-center text-slate-400">
+        <div className="w-7 h-7 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
-  // Unauthenticated -> Show Login Form
   if (!isAuthenticated) {
     return (
       <LoginForm
@@ -635,388 +621,265 @@ export default function CommandsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#060911] text-slate-100 font-sans flex flex-col selection:bg-emerald-500/30 selection:text-emerald-200">
-      {/* Top Navigation Bar */}
-      <header className="bg-slate-950/90 border-b border-slate-800/80 sticky top-0 z-20 backdrop-blur-md">
-        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-emerald-950/90 border border-emerald-500/40 flex items-center justify-center font-mono font-bold text-emerald-400 text-xs shadow-inner">
-              &gt;_
-            </div>
-            <div>
-              <h1 className="text-base font-bold text-white leading-tight tracking-tight">
-                Commands
-              </h1>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <span
-                  className={`w-1.5 h-1.5 rounded-full ${
-                    saveStatus === "saving"
-                      ? "bg-amber-400 animate-pulse"
-                      : saveStatus === "error"
-                      ? "bg-rose-500"
-                      : "bg-emerald-400"
-                  }`}
-                />
-                <span className="text-[11px] text-slate-400 font-mono">
-                  {saveStatus === "saving"
-                    ? "syncing..."
-                    : saveStatus === "error"
-                    ? "sync error"
-                    : "lifetime vault synced"}
-                </span>
-              </div>
-            </div>
+    <div className="min-h-screen bg-[#07090e] text-slate-100 font-sans flex flex-col">
+      <WorkspaceHeader
+        title="Commands"
+        icon=">_"
+        saveStatus={saveStatus}
+        primaryAction={{
+          label: "New Command",
+          onClick: () => handleOpenAdd(activeCategory),
+          icon: "+",
+        }}
+        onLogout={handleLogout}
+      />
+
+      <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 py-8 space-y-5">
+        {/* Minimal Single-Row Header: Title + Search */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-xl font-bold text-white tracking-tight">
+              Commands
+            </h1>
+            <span className="text-xs font-mono font-semibold text-slate-400 bg-[#10131c] border border-white/[0.07] px-2.5 py-0.5 rounded-lg">
+              {commands.length}
+            </span>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap justify-end">
-            <Link
-              href="/"
-              className="text-xs text-slate-300 hover:text-white px-3 py-1.5 rounded-lg border border-slate-800 bg-slate-900/70 hover:bg-slate-800 transition"
-            >
-              ← Hub
-            </Link>
-            <Link
-              href="/projects"
-              className="hidden sm:inline-block text-xs text-slate-300 hover:text-white px-3 py-1.5 rounded-lg border border-slate-800 bg-slate-900/70 hover:bg-slate-800 transition"
-            >
-              Projects
-            </Link>
-            <Link
-              href="/subscriptions"
-              className="hidden md:inline-block text-xs text-slate-300 hover:text-white px-3 py-1.5 rounded-lg border border-slate-800 bg-slate-900/70 hover:bg-slate-800 transition"
-            >
-              Subscriptions
-            </Link>
-            <Link
-              href="/passwords"
-              className="hidden md:inline-block text-xs text-slate-300 hover:text-white px-3 py-1.5 rounded-lg border border-slate-800 bg-slate-900/70 hover:bg-slate-800 transition"
-            >
-              Passwords
-            </Link>
-            <Link
-              href="/prompts"
-              className="hidden sm:inline-block text-xs text-slate-300 hover:text-white px-3 py-1.5 rounded-lg border border-slate-800 bg-slate-900/70 hover:bg-slate-800 transition"
-            >
-              Prompts
-            </Link>
-
-            <button
-              onClick={() => handleOpenAdd(activeCategory)}
-              className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold rounded-lg text-xs transition cursor-pointer shadow-sm shadow-emerald-600/20 flex items-center gap-1.5"
-            >
-              <span>+ Save command</span>
-            </button>
-
-            <NotificationBell />
-
-            <Link
-              href="/settings"
-              className="p-1.5 rounded-lg border border-slate-800 bg-slate-900/70 hover:bg-slate-800 text-slate-300 hover:text-white transition flex items-center justify-center"
-              title="Settings"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-                />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-            </Link>
-
-            <button
-              onClick={handleLogout}
-              className="text-xs text-red-400 hover:text-red-300 bg-red-950/30 hover:bg-red-950/60 px-2.5 py-1.5 rounded-lg border border-red-500/30 transition cursor-pointer"
-            >
-              Log out
-            </button>
+          <div className="relative flex items-center bg-[#10131c] border border-white/[0.07] focus-within:border-orange-500/60 rounded-xl px-3 py-1.5 w-full sm:w-80 transition">
+            <span className="font-mono text-xs font-bold text-emerald-400 mr-2 select-none">
+              $
+            </span>
+            <input
+              ref={searchInputRef}
+              type="text"
+              placeholder="Filter commands... (press /)"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-transparent text-xs font-mono text-slate-100 placeholder-slate-500 focus:outline-none"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="text-slate-400 hover:text-white text-xs ml-1.5 cursor-pointer"
+              >
+                ✕
+              </button>
+            )}
           </div>
         </div>
-      </header>
 
-      {/* Main Content Workbench */}
-      <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-6 sm:py-10 space-y-6">
-        {/* Characteristic Hero: Live Terminal Search & Environment Bar */}
-        <section className="rounded-2xl bg-[#0B101D] border border-slate-800/90 shadow-2xl overflow-hidden">
-          <div className="p-5 sm:p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-5 border-b border-slate-800/80">
-            <div className="space-y-1.5 max-w-xl">
-              <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
-                Personal CLI Reference
-              </h2>
-              <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
-                Keep the exact GitHub, npm, Linux, and custom environment commands you never want to look up twice.
-              </p>
-            </div>
+        {/* Compact Environment Pills Bar */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <button
+            onClick={() => setActiveCategory("all")}
+            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition cursor-pointer flex items-center gap-1.5 ${
+              activeCategory === "all"
+                ? "bg-white/[0.1] text-white border border-white/[0.12]"
+                : "bg-[#10131c] text-slate-400 hover:text-white border border-white/[0.06]"
+            }`}
+          >
+            <span>All</span>
+            <span className="font-mono text-[10px] opacity-75">
+              {counts.all}
+            </span>
+          </button>
 
-            {/* Interactive Terminal Search Input */}
-            <div className="w-full lg:w-96">
-              <div className="relative flex items-center bg-[#050811] border border-slate-800 focus-within:border-emerald-500/70 rounded-xl px-3.5 py-2.5 transition">
-                <span className="font-mono text-xs font-bold text-emerald-400 mr-2.5 select-none">
-                  grep
-                </span>
-                <input
-                  ref={searchInputRef}
-                  type="text"
-                  placeholder="Filter by command, flag, or description..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-transparent text-xs sm:text-sm font-mono text-slate-100 placeholder-slate-500 focus:outline-none"
-                />
-                {searchQuery ? (
-                  <button
-                    onClick={() => setSearchQuery("")}
-                    className="text-slate-400 hover:text-white text-xs ml-2 cursor-pointer"
-                    title="Clear filter"
-                  >
-                    ✕
-                  </button>
-                ) : (
-                  <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-mono text-slate-400 bg-slate-900 border border-slate-800 rounded ml-2 select-none">
-                    /
-                  </kbd>
-                )}
-              </div>
-            </div>
-          </div>
+          {counts.pinned > 0 && (
+            <button
+              onClick={() => setActiveCategory("pinned")}
+              className={`px-2.5 py-1 rounded-lg text-xs font-medium transition cursor-pointer flex items-center gap-1 ${
+                activeCategory === "pinned"
+                  ? "bg-amber-500/20 text-amber-300 border border-amber-500/35"
+                  : "bg-[#10131c] text-slate-400 hover:text-amber-300 border border-white/[0.06]"
+              }`}
+            >
+              <span>★ Pinned</span>
+              <span className="font-mono text-[10px] opacity-75">
+                {counts.pinned}
+              </span>
+            </button>
+          )}
 
-          {/* Environment Filter Rail */}
-          <div className="px-5 py-3 bg-[#080C17] flex items-center justify-between gap-3 flex-wrap">
-            <div className="flex items-center gap-1.5 flex-wrap">
+          {allCategories.map((cat) => {
+            const count = counts[cat.id] || 0;
+            const isActive =
+              activeCategory.toLowerCase() === cat.id.toLowerCase();
+            return (
               <button
-                onClick={() => setActiveCategory("all")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer flex items-center gap-2 ${
-                  activeCategory === "all"
-                    ? "bg-slate-800 text-white border border-slate-700 shadow-sm"
-                    : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
+                key={cat.id}
+                onClick={() => setActiveCategory(cat.id)}
+                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition cursor-pointer flex items-center gap-1.5 ${
+                  isActive
+                    ? "bg-white/[0.1] text-white border border-white/[0.12]"
+                    : "bg-[#10131c] text-slate-400 hover:text-white border border-white/[0.06]"
                 }`}
               >
-                <span>All environments</span>
-                <span className="font-mono text-[11px] text-slate-400">{counts.all}</span>
+                <span className={`w-1.5 h-1.5 rounded-full ${cat.dotClass}`} />
+                <span>{cat.label}</span>
+                {count > 0 && (
+                  <span className="font-mono text-[10px] opacity-70">
+                    {count}
+                  </span>
+                )}
               </button>
+            );
+          })}
+        </div>
 
-              {counts.pinned > 0 && (
-                <button
-                  onClick={() => setActiveCategory("pinned")}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer flex items-center gap-1.5 ${
-                    activeCategory === "pinned"
-                      ? "bg-amber-950/70 text-amber-300 border border-amber-500/40"
-                      : "text-slate-400 hover:text-amber-300 hover:bg-slate-900"
-                  }`}
-                >
-                  <span>★ Pinned</span>
-                  <span className="font-mono text-[11px] opacity-80">{counts.pinned}</span>
-                </button>
-              )}
-
-              <div className="h-4 w-px bg-slate-800 mx-1 hidden sm:block" />
-
-              {allCategories.map((cat) => {
-                const count = counts[cat.id] || 0;
-                const isActive = activeCategory.toLowerCase() === cat.id.toLowerCase();
-                return (
-                  <button
-                    key={cat.id}
-                    onClick={() => setActiveCategory(cat.id)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer flex items-center gap-2 ${
-                      isActive
-                        ? "bg-slate-800 text-white border border-slate-700 shadow-sm"
-                        : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
-                    }`}
-                  >
-                    <span className={`w-2 h-2 rounded-full ${cat.dotClass}`} />
-                    <span>{cat.label}</span>
-                    {count > 0 && (
-                      <span className="font-mono text-[11px] text-slate-400">{count}</span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-
-            <button
-              onClick={() => handleOpenAdd(activeCategory)}
-              className="text-xs font-mono text-emerald-400 hover:text-emerald-300 transition cursor-pointer hidden md:flex items-center gap-1"
-            >
-              <span>+ new entry</span>
-            </button>
-          </div>
-        </section>
-
-        {/* Command Ledger Content */}
+        {/* Command List */}
         {isLoading ? (
-          <div className="py-20 text-center text-slate-400">
-            <div className="w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-            <p className="text-sm font-mono">Loading saved commands...</p>
+          <div className="rounded-2xl bg-[#0d1017] border border-white/[0.07] p-12 text-center text-slate-400">
+            <div className="w-6 h-6 border-2 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto mb-2.5" />
+            <p className="text-xs">Loading commands...</p>
           </div>
         ) : filteredCommands.length === 0 ? (
-          /* Empty State */
-          <div className="rounded-2xl bg-[#0B101D] border border-slate-800/80 p-8 sm:p-12 text-center max-w-xl mx-auto my-8 space-y-5">
-            <div className="w-12 h-12 rounded-xl bg-emerald-950/70 border border-emerald-500/30 font-mono text-base font-bold text-emerald-400 flex items-center justify-center mx-auto">
-              &gt;_
-            </div>
-            <div className="space-y-1.5">
-              <h3 className="text-base font-bold text-white">
-                {searchQuery || activeCategory !== "all"
-                  ? "No commands match this filter"
-                  : "Your command vault is empty"}
-              </h3>
-              <p className="text-xs sm:text-sm text-slate-400 max-w-md mx-auto leading-relaxed">
-                {searchQuery || activeCategory !== "all"
-                  ? "Clear the search filter or switch back to all environments to see your saved commands."
-                  : "Save GitHub workflows, npm scripts, Linux diagnostics, or any custom CLI commands with a short note so they are always one click away."}
-              </p>
-            </div>
-
-            <div className="flex items-center justify-center gap-3 flex-wrap pt-1">
+          <div className="rounded-2xl bg-[#0d1017] border border-white/[0.07] p-12 text-center space-y-3">
+            <p className="text-sm text-slate-400">
+              {searchQuery || activeCategory !== "all"
+                ? "No matching commands."
+                : "No commands saved yet."}
+            </p>
+            <div className="flex items-center justify-center gap-2.5">
               {searchQuery || activeCategory !== "all" ? (
                 <button
                   onClick={() => {
                     setSearchQuery("");
                     setActiveCategory("all");
                   }}
-                  className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition cursor-pointer"
+                  className="px-3.5 py-1.5 rounded-xl bg-white/[0.07] hover:bg-white/[0.12] text-white text-xs font-medium transition cursor-pointer"
                 >
-                  Show all commands
+                  Reset filter
                 </button>
               ) : (
                 <>
                   <button
                     onClick={() => handleOpenAdd("github")}
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-xs rounded-lg transition cursor-pointer"
+                    className="px-4 py-2 bg-orange-500 hover:bg-orange-400 text-white font-semibold text-xs rounded-xl transition cursor-pointer"
                   >
-                    + Save your first command
+                    + New Command
                   </button>
                   <button
                     onClick={handleLoadStarterCommands}
                     disabled={isSeeding}
-                    className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-xs font-medium rounded-lg transition cursor-pointer disabled:opacity-50"
+                    className="px-3.5 py-2 bg-[#10131c] hover:bg-white/[0.06] text-slate-300 border border-white/[0.08] text-xs font-medium rounded-xl transition cursor-pointer"
                   >
-                    {isSeeding ? "Loading starter pack..." : "Load 5 essential Git & Linux commands"}
+                    {isSeeding ? "Loading..." : "Load Starter Pack"}
                   </button>
                 </>
               )}
             </div>
           </div>
         ) : (
-          /* Terminal Rack List */
-          <div className="space-y-3">
+          <div className="rounded-2xl bg-[#0d1017] border border-white/[0.07] divide-y divide-white/[0.06] overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.6)]">
             {filteredCommands.map((item) => {
               const cat = resolveCategoryMeta(item.category, allCategories);
               const isCopied = copiedId === item.id;
 
               return (
-                <article
+                <div
                   key={item.id}
-                  className={`group rounded-2xl bg-[#0B101D] border transition-colors ${
-                    item.isPinned
-                      ? "border-emerald-500/35 hover:border-emerald-500/60"
-                      : "border-slate-800/90 hover:border-slate-700"
-                  } p-4 sm:p-5 shadow-lg`}
+                  className="group p-4 hover:bg-white/[0.015] transition-colors space-y-2"
                 >
-                  <div className="flex flex-col gap-3">
-                    {/* Top Row: Category Badge & Row Controls */}
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-2.5 flex-wrap min-w-0">
+                  {/* Command Strip + Controls */}
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <span
+                        className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-mono font-medium border shrink-0 ${cat.badgeClass}`}
+                      >
                         <span
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[11px] font-mono font-medium border ${cat.badgeClass}`}
-                        >
-                          <span className={`w-1.5 h-1.5 rounded-full ${cat.dotClass}`} />
-                          {cat.label}
+                          className={`w-1.5 h-1.5 rounded-full ${cat.dotClass}`}
+                        />
+                        {cat.label}
+                      </span>
+
+                      {item.title && (
+                        <span className="text-xs text-slate-300 truncate">
+                          {item.title}
                         </span>
-                      </div>
-
-                      {/* Pin, Edit, Delete Controls */}
-                      <div className="flex items-center gap-1 shrink-0">
-                        <button
-                          onClick={() => handleTogglePin(item)}
-                          title={item.isPinned ? "Unpin command" : "Pin command to top"}
-                          className={`p-1.5 rounded-lg text-xs transition cursor-pointer ${
-                            item.isPinned
-                              ? "text-amber-400 bg-amber-950/40 border border-amber-500/30"
-                              : "text-slate-500 hover:text-slate-300 hover:bg-slate-900"
-                          }`}
-                        >
-                          ★
-                        </button>
-
-                        <button
-                          onClick={() => handleOpenEdit(item)}
-                          title="Edit command"
-                          className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800/80 rounded-lg transition cursor-pointer"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth="2"
-                              d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                            />
-                          </svg>
-                        </button>
-
-                        <button
-                          onClick={() => handleDeleteCommand(item.id, item.title || item.command)}
-                          title="Remove command"
-                          className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800/80 rounded-lg transition cursor-pointer"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth="2"
-                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                            />
-                          </svg>
-                        </button>
-                      </div>
+                      )}
                     </div>
 
-                    {/* Centerpiece: Terminal Command Strip with Integrated Copy Button */}
-                    <div className="relative flex items-center justify-between gap-3 rounded-xl bg-[#050811] border border-slate-800/90 px-4 py-3 font-mono text-xs sm:text-sm overflow-x-auto">
-                      <div className="min-w-0 flex-1 overflow-x-auto whitespace-pre-wrap break-all pr-2">
-                        {renderHighlightedCommand(item.command)}
-                      </div>
-
+                    <div className="flex items-center gap-1 shrink-0">
                       <button
                         onClick={() => handleCopyCommand(item.id, item.command)}
-                        className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-sans font-semibold transition flex items-center gap-1.5 cursor-pointer ${
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition flex items-center gap-1 cursor-pointer ${
                           isCopied
-                            ? "bg-emerald-500 text-slate-950 shadow-sm"
-                            : "bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700/80"
+                            ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                            : "bg-white/[0.05] hover:bg-white/[0.1] text-slate-200 border border-white/[0.08]"
                         }`}
                       >
-                        {isCopied ? (
-                          <>
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
-                            </svg>
-                            <span>Copied</span>
-                          </>
-                        ) : (
-                          <>
-                            <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth="2"
-                                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                              />
-                            </svg>
-                            <span>Copy command</span>
-                          </>
-                        )}
+                        {isCopied ? "✓ Copied" : "Copy"}
+                      </button>
+
+                      <button
+                        onClick={() => handleTogglePin(item)}
+                        title={item.isPinned ? "Unpin" : "Pin to top"}
+                        className={`w-7 h-7 rounded-lg text-xs flex items-center justify-center transition cursor-pointer ${
+                          item.isPinned
+                            ? "text-amber-400 bg-amber-500/15"
+                            : "text-slate-500 hover:text-slate-300 hover:bg-white/[0.05]"
+                        }`}
+                      >
+                        ★
+                      </button>
+
+                      <button
+                        onClick={() => handleOpenEdit(item)}
+                        title="Edit"
+                        className="w-7 h-7 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] flex items-center justify-center transition cursor-pointer"
+                      >
+                        <svg
+                          className="w-3.5 h-3.5"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="2"
+                            d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                          />
+                        </svg>
+                      </button>
+
+                      <button
+                        onClick={() =>
+                          handleDeleteCommand(
+                            item.id,
+                            item.title || item.command
+                          )
+                        }
+                        title="Delete"
+                        className="w-7 h-7 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 flex items-center justify-center transition cursor-pointer"
+                      >
+                        <svg
+                          className="w-3.5 h-3.5"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="2"
+                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                          />
+                        </svg>
                       </button>
                     </div>
-
-                    {/* Optional "What does this command do?" note */}
-                    {item.title && (
-                      <p className="text-xs sm:text-sm text-slate-300 whitespace-pre-wrap leading-relaxed pl-1">
-                        {item.title}
-                      </p>
-                    )}
                   </div>
-                </article>
+
+                  {/* Terminal Code Box */}
+                  <div
+                    onClick={() => handleCopyCommand(item.id, item.command)}
+                    title="Click to copy command"
+                    className="rounded-xl bg-[#07090e] border border-white/[0.06] hover:border-white/[0.12] px-3.5 py-2.5 font-mono text-xs overflow-x-auto cursor-pointer transition"
+                  >
+                    {renderHighlightedCommand(item.command)}
+                  </div>
+                </div>
               );
             })}
           </div>
@@ -1026,58 +889,50 @@ export default function CommandsPage() {
       {/* SAVE / EDIT COMMAND MODAL */}
       {isModalOpen && (
         <div
-          className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto"
+          className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4"
           onClick={() => setIsModalOpen(false)}
         >
           <div
-            className="bg-[#0B101D] border border-slate-800 rounded-2xl w-full max-w-xl p-6 shadow-2xl space-y-5"
+            className="bg-[#10131c] border border-white/[0.08] rounded-2xl w-full max-w-lg p-5 shadow-2xl space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3.5">
-              <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-lg bg-emerald-950 border border-emerald-500/40 flex items-center justify-center text-emerald-400 text-xs font-mono font-bold">
-                  &gt;_
-                </div>
-                <h3 className="text-base font-bold text-white">
-                  {editingId ? "Edit command" : "Save command to vault"}
-                </h3>
-              </div>
+            <div className="flex items-center justify-between border-b border-white/[0.07] pb-3">
+              <h3 className="text-sm font-bold text-white">
+                {editingId ? "Edit Command" : "New Command"}
+              </h3>
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="text-slate-400 hover:text-white text-sm p-1 rounded-md cursor-pointer"
+                className="text-slate-400 hover:text-white text-xs cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
-            <form onSubmit={handleSaveCommand} className="space-y-4">
-              {/* Category Selector Pills + Custom Environment Creator */}
-              <div className="space-y-2">
+            <form onSubmit={handleSaveCommand} className="space-y-3.5">
+              {/* Environment Selector */}
+              <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <label className="block text-xs font-semibold text-slate-300">
+                  <label className="text-xs font-medium text-slate-300">
                     Environment
                   </label>
-                  {!isAddingCustomEnv && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsAddingCustomEnv(true);
-                        setTimeout(() => customEnvInputRef.current?.focus(), 50);
-                      }}
-                      className="text-xs font-mono text-emerald-400 hover:text-emerald-300 transition cursor-pointer flex items-center gap-1"
-                    >
-                      <span>+ Custom environment</span>
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAddingCustomEnv(!isAddingCustomEnv);
+                      setTimeout(() => customEnvInputRef.current?.focus(), 50);
+                    }}
+                    className="text-[11px] font-semibold text-orange-400 hover:text-orange-300 transition cursor-pointer"
+                  >
+                    {isAddingCustomEnv ? "Cancel" : "+ Custom"}
+                  </button>
                 </div>
 
-                {/* Custom Environment Input Box (when toggled) */}
                 {isAddingCustomEnv && (
-                  <div className="flex items-center gap-2 p-2 rounded-xl bg-[#050811] border border-emerald-500/50">
+                  <div className="flex items-center gap-1.5">
                     <input
                       ref={customEnvInputRef}
                       type="text"
-                      placeholder="e.g. Python, AWS CLI, Kubernetes, PowerShell, Rust..."
+                      placeholder="e.g. Python, AWS, Rust..."
                       value={customEnvInput}
                       onChange={(e) => setCustomEnvInput(e.target.value)}
                       onKeyDown={(e) => {
@@ -1086,53 +941,43 @@ export default function CommandsPage() {
                           handleConfirmCustomEnv();
                         }
                       }}
-                      className="flex-1 bg-transparent px-2 py-1 text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none"
+                      className="flex-1 bg-[#07090e] border border-white/[0.1] rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-orange-500"
                     />
                     <button
                       type="button"
                       onClick={handleConfirmCustomEnv}
-                      className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-xs transition cursor-pointer"
+                      className="px-3 py-1.5 rounded-lg bg-orange-500 hover:bg-orange-400 text-white font-semibold text-xs transition cursor-pointer"
                     >
                       Add
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsAddingCustomEnv(false);
-                        setCustomEnvInput("");
-                      }}
-                      className="px-2 py-1 text-xs text-slate-400 hover:text-white cursor-pointer"
-                    >
-                      Cancel
                     </button>
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-44 overflow-y-auto pr-0.5">
+                <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
                   {allCategories.map((cat) => {
-                    const selected = formCategory.toLowerCase() === cat.id.toLowerCase();
+                    const selected =
+                      formCategory.toLowerCase() === cat.id.toLowerCase();
                     const canRemoveCustom =
                       cat.isCustom && (counts[cat.id] || 0) === 0;
                     return (
                       <div
                         key={cat.id}
                         onClick={() => setFormCategory(cat.id)}
-                        className={`group/pill px-3 py-2 rounded-xl border text-left text-xs font-medium transition cursor-pointer flex items-center justify-between gap-2 ${
+                        className={`group/pill px-2.5 py-1 rounded-lg border text-xs font-medium transition cursor-pointer flex items-center gap-1.5 ${
                           selected
-                            ? "bg-slate-800/90 border-emerald-500/60 text-white shadow-sm"
-                            : "bg-[#050811] border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200"
+                            ? "bg-orange-500/20 border-orange-500/50 text-orange-200"
+                            : "bg-[#07090e] border-white/[0.08] text-slate-400 hover:text-white"
                         }`}
                       >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className={`w-2 h-2 rounded-full shrink-0 ${cat.dotClass}`} />
-                          <span className="truncate">{cat.label}</span>
-                        </div>
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full ${cat.dotClass}`}
+                        />
+                        <span>{cat.label}</span>
                         {canRemoveCustom && (
                           <button
                             type="button"
                             onClick={(e) => handleRemoveCustomEnv(cat.id, e)}
-                            title="Remove custom environment"
-                            className="text-[10px] text-slate-500 hover:text-rose-400 opacity-0 group-hover/pill:opacity-100 transition px-1"
+                            className="text-[10px] text-slate-500 hover:text-rose-400 ml-0.5"
                           >
                             ✕
                           </button>
@@ -1140,90 +985,68 @@ export default function CommandsPage() {
                       </div>
                     );
                   })}
-
-                  {/* Quick "+ Custom" Tile inside Grid */}
-                  {!isAddingCustomEnv && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsAddingCustomEnv(true);
-                        setTimeout(() => customEnvInputRef.current?.focus(), 50);
-                      }}
-                      className="px-3 py-2 rounded-xl border border-dashed border-slate-700 hover:border-emerald-500/60 bg-[#050811]/60 text-slate-400 hover:text-emerald-400 text-xs font-mono transition cursor-pointer flex items-center justify-center gap-1.5"
-                    >
-                      <span>+ Custom...</span>
-                    </button>
-                  )}
                 </div>
               </div>
 
               {/* Command Input */}
-              <div className="space-y-1.5">
-                <label className="block text-xs font-semibold text-slate-300">
-                  Command *
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1">
+                  Command
                 </label>
-                <div className="relative rounded-xl bg-[#050811] border border-slate-800 focus-within:border-emerald-500/70 p-3 transition">
-                  <div className="flex items-start gap-2">
-                    <span className="font-mono text-xs font-bold text-emerald-400 pt-0.5 select-none">
-                      $
-                    </span>
-                    <textarea
-                      required
-                      rows={3}
-                      placeholder={selectedCatMeta.placeholderCmd}
-                      value={formCommand}
-                      onChange={(e) => setFormCommand(e.target.value)}
-                      className="w-full bg-transparent text-xs sm:text-sm font-mono text-slate-100 placeholder-slate-600 focus:outline-none resize-y leading-relaxed"
-                    />
-                  </div>
+                <div className="flex items-start gap-2 rounded-xl bg-[#07090e] border border-white/[0.09] focus-within:border-orange-500 p-2.5 transition">
+                  <span className="font-mono text-xs font-bold text-emerald-400 pt-0.5 select-none">
+                    $
+                  </span>
+                  <textarea
+                    required
+                    rows={2}
+                    placeholder={selectedCatMeta.placeholderCmd}
+                    value={formCommand}
+                    onChange={(e) => setFormCommand(e.target.value)}
+                    className="w-full bg-transparent text-xs font-mono text-slate-100 placeholder-slate-500 focus:outline-none resize-y leading-relaxed"
+                  />
                 </div>
               </div>
 
-              {/* What does this command do? (Optional Textarea) */}
-              <div className="space-y-1.5">
-                <label className="block text-xs font-semibold text-slate-300">
-                  What does this command do? <span className="text-slate-500 font-normal">(optional)</span>
+              {/* Optional description */}
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1">
+                  What does this command do?{" "}
+                  <span className="text-slate-500">(optional)</span>
                 </label>
                 <textarea
-                  rows={3}
+                  rows={2}
                   placeholder={selectedCatMeta.placeholderTitle}
                   value={formTitle}
                   onChange={(e) => setFormTitle(e.target.value)}
-                  className="w-full bg-[#050811] border border-slate-800 focus:border-emerald-500/70 rounded-xl p-3 text-xs sm:text-sm text-slate-200 placeholder-slate-600 focus:outline-none transition resize-y leading-relaxed"
+                  className="w-full bg-[#07090e] border border-white/[0.09] focus:border-orange-500 rounded-xl p-2.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none transition resize-y"
                 />
               </div>
 
-              {/* Pin Toggle */}
-              <label className="flex items-center gap-2.5 pt-1 cursor-pointer select-none">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={formPinned}
                   onChange={(e) => setFormPinned(e.target.checked)}
-                  className="rounded border-slate-700 bg-slate-900 text-emerald-500 focus:ring-emerald-500"
+                  className="rounded border-white/20 bg-[#07090e] text-orange-500"
                 />
-                <span className="text-xs text-slate-300">
-                  Pin this command to the top of my list
-                </span>
+                <span className="text-xs text-slate-300">Pin to top</span>
               </label>
 
-              {/* Modal Actions */}
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/[0.07]">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+                  className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={saveStatus === "saving"}
-                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-slate-950 rounded-lg text-xs font-bold shadow-md shadow-emerald-600/20 transition cursor-pointer flex items-center gap-2"
+                  className="px-4 py-1.5 bg-orange-500 hover:bg-orange-400 disabled:opacity-50 text-white rounded-lg text-xs font-semibold transition cursor-pointer"
                 >
-                  {saveStatus === "saving" && (
-                    <span className="w-3.5 h-3.5 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
-                  )}
-                  <span>{editingId ? "Save changes" : "Save command"}</span>
+                  {editingId ? "Save" : "Add Command"}
                 </button>
               </div>
             </form>

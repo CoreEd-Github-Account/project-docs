@@ -32,6 +32,7 @@ export function TemplateEditor({
 }: TemplateEditorProps) {
   const [editingHeadingId, setEditingHeadingId] = useState<number | null>(null);
   const [tempHeadingText, setTempHeadingText] = useState("");
+  const [copiedSectionId, setCopiedSectionId] = useState<number | null>(null);
 
   const startEditingHeading = (id: number, currentHeading: string) => {
     if (isReadOnly) return;
@@ -52,124 +53,120 @@ export function TemplateEditor({
     setTempHeadingText("");
   };
 
+  const handleCopySection = (id: number, content: string) => {
+    if (!content) return;
+    navigator.clipboard.writeText(content);
+    setCopiedSectionId(id);
+    setTimeout(() => setCopiedSectionId(null), 1800);
+  };
+
   return (
-    <div className="bg-slate-900 p-6 sm:p-8 rounded-xl shadow-md border border-slate-800 space-y-6">
-      {/* READ ONLY BANNER */}
+    <div className="space-y-4">
       {isReadOnly && (
-        <div className="flex items-center gap-3 p-3.5 rounded-xl bg-blue-950/40 border border-blue-500/30 text-blue-300 text-xs sm:text-sm">
-          <span className="text-base shrink-0">👁️</span>
+        <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-[#0d1017] border border-white/[0.08] text-slate-300 text-xs">
+          <span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0" />
           <div>
-            <strong className="font-semibold text-white">Read Only Access:</strong> You are viewing this template as a read-only collaborator. You cannot edit project name, headings, or section details.
+            <strong className="font-semibold text-white">Read-Only View:</strong>{" "}
+            You can view and copy sections, but editing is disabled for your role.
           </div>
         </div>
       )}
 
-      <div className="border-b border-slate-800 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-white tracking-tight">
-            Template Builder
-          </h1>
-          <p className="text-sm text-slate-400 mt-1">
-            Configure headings and details for this project file.
-          </p>
-        </div>
-
-        {/* MY TEMPLATE QUICK ACTION BUTTON */}
-        {!isReadOnly && (
-          <button
-            onClick={onApplyMyTemplate}
-            title="Auto-add standard headings: PORT, Live URL, Admin Credentials, Build Command"
-            className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow-sm transition active:scale-[0.98] cursor-pointer shrink-0"
-          >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M13 10V3L4 14h7v7l9-11h-7z"
-              />
-            </svg>
-            <span>My Template</span>
-          </button>
-        )}
-      </div>
-
-      {/* Project Name Field */}
-      <div>
-        <label className="block text-sm font-semibold text-slate-300 mb-1.5 flex items-center justify-between">
-          <span>Project Name</span>
-          {isReadOnly && (
-            <span className="text-[11px] font-normal text-slate-400">Locked (Read Only)</span>
-          )}
-        </label>
-        <input
-          type="text"
-          readOnly={isReadOnly}
-          disabled={isReadOnly}
-          value={project.name}
-          onChange={(e) => onUpdateProjectName(e.target.value)}
-          placeholder="Enter project name..."
-          className={`w-full bg-slate-950 border border-slate-700 p-2.5 rounded-lg font-medium transition ${
-            isReadOnly
-              ? "text-slate-300 bg-slate-950/60 border-slate-800 cursor-not-allowed select-text focus:outline-none"
-              : "text-white placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-          }`}
-        />
-      </div>
-
-      {/* Add New Section Heading */}
-      {!isReadOnly && (
-        <div>
-          <div className="flex items-center justify-between mb-1.5">
-            <label className="block text-sm font-semibold text-slate-300">
-              Add Section Heading
-            </label>
-            <span className="text-xs text-slate-400">
-              or use <strong>My Template</strong> above
+      {/* Top Project Info & Quick Add Card */}
+      <div className="bg-[#0d1017] p-4 sm:p-5 rounded-2xl border border-white/[0.07] space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-3.5 border-b border-white/[0.06]">
+          <div className="flex items-center gap-2.5">
+            <h2 className="text-base font-bold text-white tracking-tight">
+              Template &amp; Specs
+            </h2>
+            <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-white/[0.05] text-slate-400 border border-white/[0.06]">
+              {project.sections.length} {project.sections.length === 1 ? "section" : "sections"}
             </span>
           </div>
-          <div className="flex gap-2">
+
+          {!isReadOnly && (
+            <button
+              onClick={onApplyMyTemplate}
+              title="Add standard sections: PORT, Live URL, Admin Credentials, Build Command"
+              className="flex items-center gap-1.5 bg-[#10131c] hover:bg-white/[0.06] border border-white/[0.08] text-slate-300 hover:text-white px-3 py-1.5 rounded-xl text-xs font-medium transition active:scale-[0.98] cursor-pointer shrink-0"
+            >
+              <svg className="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 4v16m8-8H4" />
+              </svg>
+              <span>Load Standard Sections</span>
+            </button>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+          {/* Project Name Field */}
+          <div>
+            <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+              Project Name
+            </label>
             <input
               type="text"
-              value={newHeading}
-              onChange={(e) => setNewHeading(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  onAddSection();
-                }
-              }}
-              placeholder="e.g. Live URL, Admin Credentials..."
-              className="flex-1 bg-slate-950 border border-slate-700 p-2.5 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm text-white placeholder-slate-500 transition"
+              readOnly={isReadOnly}
+              disabled={isReadOnly}
+              value={project.name}
+              onChange={(e) => onUpdateProjectName(e.target.value)}
+              placeholder="Enter project name..."
+              className={`w-full bg-[#07090e] border border-white/[0.08] px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium transition ${
+                isReadOnly
+                  ? "text-slate-400 cursor-not-allowed"
+                  : "text-white placeholder-slate-600 focus:border-white/[0.22] outline-none"
+              }`}
             />
-            <button
-              onClick={onAddSection}
-              className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium transition whitespace-nowrap border border-slate-700 active:scale-[0.98] cursor-pointer"
-            >
-              Add Heading
-            </button>
           </div>
+
+          {/* Add New Section Heading */}
+          {!isReadOnly && (
+            <div>
+              <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                Add New Section
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newHeading}
+                  onChange={(e) => setNewHeading(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      onAddSection();
+                    }
+                  }}
+                  placeholder="e.g. Live URL, Database URI, Port..."
+                  className="flex-1 bg-[#07090e] border border-white/[0.08] px-3.5 py-2 rounded-xl outline-none focus:border-white/[0.22] text-xs sm:text-sm text-white placeholder-slate-600 transition"
+                />
+                <button
+                  onClick={onAddSection}
+                  className="bg-white hover:bg-slate-200 text-slate-950 px-4 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap active:scale-[0.98] cursor-pointer"
+                >
+                  + Add
+                </button>
+              </div>
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Section Content List */}
-      <div className="space-y-5 pt-2">
+      <div className="space-y-3">
         {project.sections.length === 0 ? (
-          <div className="text-center py-10 px-4 text-slate-400 border-2 border-dashed border-slate-800 bg-slate-950/40 rounded-xl space-y-3">
-            <p className="text-sm">
-              No headings in this project yet.
+          <div className="text-center py-12 px-4 text-slate-400 border border-white/[0.07] bg-[#0d1017] rounded-2xl space-y-3">
+            <p className="text-sm font-semibold text-slate-200">
+              No sections added yet
+            </p>
+            <p className="text-xs text-slate-500">
+              Add a custom section above or load the standard preset sections.
             </p>
             {!isReadOnly && (
               <button
                 onClick={onApplyMyTemplate}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-950/60 hover:bg-blue-900/60 text-blue-400 rounded-lg text-sm font-semibold transition border border-blue-500/30 cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-200 text-slate-950 rounded-xl text-xs font-semibold transition cursor-pointer"
               >
-                <span>⚡ Load &quot;My Template&quot; Headings</span>
+                <span>Load Standard Sections</span>
               </button>
             )}
           </div>
@@ -177,11 +174,11 @@ export function TemplateEditor({
           project.sections.map((sec) => (
             <div
               key={sec.id}
-              className="border-l-4 border-blue-500 pl-4 bg-slate-950/80 p-4 rounded-r-lg border-y border-r border-slate-800 space-y-2.5"
+              className="bg-[#0d1017] p-4 rounded-2xl border border-white/[0.07] hover:border-white/[0.12] transition space-y-2.5"
             >
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2">
                 {editingHeadingId === sec.id && !isReadOnly ? (
-                  <div className="flex items-center gap-1.5 flex-1 max-w-sm mr-2">
+                  <div className="flex items-center gap-1.5 flex-1 max-w-sm">
                     <input
                       type="text"
                       autoFocus
@@ -195,60 +192,35 @@ export function TemplateEditor({
                           cancelEditingHeading();
                         }
                       }}
-                      className="w-full bg-slate-900 border border-blue-500 px-2.5 py-1 rounded text-sm text-white font-bold outline-none focus:ring-1 focus:ring-blue-400"
-                      placeholder="Heading name..."
+                      className="w-full bg-[#07090e] border border-white/[0.22] px-2.5 py-1 rounded-lg text-xs sm:text-sm text-white font-semibold outline-none"
+                      placeholder="Section heading..."
                     />
                     <button
                       type="button"
                       onClick={() => saveEditingHeading(sec.id)}
-                      title="Save heading"
-                      className="p-1 text-emerald-400 hover:text-emerald-300 hover:bg-slate-800 rounded transition cursor-pointer"
+                      className="px-2.5 py-1 text-xs font-semibold bg-white text-slate-950 rounded-lg hover:bg-slate-200 transition cursor-pointer"
                     >
-                      <svg
-                        className="w-4 h-4"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M5 13l4 4L19 7"
-                        />
-                      </svg>
+                      Save
                     </button>
                     <button
                       type="button"
                       onClick={cancelEditingHeading}
-                      title="Cancel"
-                      className="p-1 text-slate-400 hover:text-slate-300 hover:bg-slate-800 rounded transition cursor-pointer"
+                      className="px-2 py-1 text-xs text-slate-400 hover:text-white rounded-lg transition cursor-pointer"
                     >
-                      <svg
-                        className="w-4 h-4"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M6 18L18 6M6 6l12 12"
-                        />
-                      </svg>
+                      Cancel
                     </button>
                   </div>
                 ) : (
                   <div className="flex items-center gap-2 group">
+                    <span className="w-1.5 h-1.5 rounded-full bg-white/40 shrink-0" />
                     <h3
                       onClick={() => {
                         if (!isReadOnly) startEditingHeading(sec.id, sec.heading);
                       }}
-                      className={`font-bold text-white text-base transition select-text ${
-                        !isReadOnly ? "cursor-pointer hover:text-blue-400" : ""
+                      className={`font-semibold text-white text-sm transition ${
+                        !isReadOnly ? "cursor-pointer hover:text-slate-300" : ""
                       }`}
-                      title={!isReadOnly ? "Click to edit heading" : sec.heading}
+                      title={!isReadOnly ? "Click to rename section" : sec.heading}
                     >
                       {sec.heading}
                     </h3>
@@ -256,49 +228,49 @@ export function TemplateEditor({
                       <button
                         type="button"
                         onClick={() => startEditingHeading(sec.id, sec.heading)}
-                        title="Edit heading"
-                        className="text-slate-400 hover:text-blue-400 p-1 rounded transition cursor-pointer"
+                        title="Rename section"
+                        className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-slate-200 px-1.5 py-0.5 rounded transition cursor-pointer text-[11px]"
                       >
-                        <svg
-                          className="w-3.5 h-3.5"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                          />
-                        </svg>
+                        Rename
                       </button>
                     )}
                   </div>
                 )}
 
-                {/* Remove section button */}
-                {!isReadOnly && canDelete && (
-                  <button
-                    onClick={() => onRemoveSection(sec.id)}
-                    title="Remove section"
-                    className="text-slate-400 hover:text-red-400 p-1 text-xs transition rounded cursor-pointer"
-                  >
-                    ✕
-                  </button>
-                )}
+                <div className="flex items-center gap-1.5">
+                  {sec.content && (
+                    <button
+                      type="button"
+                      onClick={() => handleCopySection(sec.id, sec.content)}
+                      className="px-2.5 py-1 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.07] text-[11px] font-medium text-slate-300 hover:text-white transition cursor-pointer"
+                    >
+                      {copiedSectionId === sec.id ? "Copied" : "Copy"}
+                    </button>
+                  )}
+
+                  {!isReadOnly && canDelete && (
+                    <button
+                      onClick={() => onRemoveSection(sec.id)}
+                      title="Remove section"
+                      className="px-2 py-1 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 text-xs transition rounded-lg cursor-pointer"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
               </div>
+
               <textarea
-                rows={5}
+                rows={4}
                 readOnly={isReadOnly}
                 disabled={isReadOnly}
                 value={sec.content}
                 onChange={(e) => onUpdateSectionContent(sec.id, e.target.value)}
-                placeholder={isReadOnly ? "No content provided." : `${sec.heading} content goes here...`}
-                className={`w-full bg-slate-900 border p-3 rounded-md font-mono text-sm leading-relaxed text-slate-100 placeholder-slate-500 transition ${
+                placeholder={isReadOnly ? "No content provided." : `Enter ${sec.heading} details...`}
+                className={`w-full bg-[#07090e] border border-white/[0.07] p-3.5 rounded-xl font-mono text-xs sm:text-sm leading-relaxed text-slate-100 placeholder-slate-600 transition ${
                   isReadOnly
-                    ? "border-slate-800 bg-slate-950/50 cursor-default select-text focus:outline-none opacity-90"
-                    : "border-slate-700 outline-none focus:ring-2 focus:ring-blue-500"
+                    ? "cursor-default select-text focus:outline-none opacity-90"
+                    : "outline-none focus:border-white/[0.22]"
                 }`}
               />
             </div>

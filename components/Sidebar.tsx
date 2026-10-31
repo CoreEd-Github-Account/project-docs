@@ -42,8 +42,9 @@ export function Sidebar({
   fullName: initialFullName,
 }: SidebarProps) {
   const [userName, setUserName] = React.useState<string>(username || "");
-  const [userFullName, setUserFullName] = React.useState<string>(initialFullName || "");
-  const [userAvatar, setUserAvatar] = React.useState<string>("👤");
+  const [userFullName, setUserFullName] = React.useState<string>(
+    initialFullName || ""
+  );
   const [unreadNotifs, setUnreadNotifs] = React.useState<number>(0);
 
   React.useEffect(() => {
@@ -68,12 +69,8 @@ export function Sidebar({
   }, []);
 
   React.useEffect(() => {
-    if (username) {
-      setUserName(username);
-    }
-    if (initialFullName) {
-      setUserFullName(initialFullName);
-    }
+    if (username) setUserName(username);
+    if (initialFullName) setUserFullName(initialFullName);
     let isMounted = true;
     async function loadUserInfo() {
       try {
@@ -83,27 +80,19 @@ export function Sidebar({
           if (isMounted && authData?.user) {
             if (authData.user.username) setUserName(authData.user.username);
             if (authData.user.fullName) setUserFullName(authData.user.fullName);
-            if (authData.user.avatarUrl) setUserAvatar(authData.user.avatarUrl);
           }
         }
         const profRes = await fetch("/api/profile");
         if (profRes.ok) {
           const profData = await profRes.json();
           if (isMounted && profData?.profile) {
-            if (profData.profile.username) {
+            if (profData.profile.username)
               setUserName(profData.profile.username);
-            }
-            if (profData.profile.fullName) {
+            if (profData.profile.fullName)
               setUserFullName(profData.profile.fullName);
-            }
-            if (profData.profile.avatarUrl) {
-              setUserAvatar(profData.profile.avatarUrl);
-            }
           }
         }
-      } catch {
-        // ignore
-      }
+      } catch {}
     }
     loadUserInfo();
     return () => {
@@ -117,88 +106,88 @@ export function Sidebar({
 
   return (
     <>
-      {/* Backdrop for Mobile */}
       {isSidebarOpen && (
         <div
           onClick={() => setIsSidebarOpen(false)}
-          className="fixed inset-0 bg-black/50 z-20 md:hidden"
+          className="fixed inset-0 bg-black/60 backdrop-blur-xs z-20 md:hidden"
         />
       )}
 
-      {/* LEFT SIDEBAR */}
       <aside
-        className={`fixed md:sticky top-0 inset-y-0 left-0 z-20 h-screen max-h-screen bg-slate-900 text-slate-200 border-r border-slate-800 flex flex-col transition-all duration-300 ease-in-out shrink-0 select-none overflow-x-hidden ${
-          isSidebarOpen ? "translate-x-0" : "-translate-x-0 max-md:-translate-x-full"
-        } ${isCollapsed ? "md:w-16 w-72" : "w-72 md:w-80"}`}
+        className={`fixed md:sticky top-0 inset-y-0 left-0 z-20 h-screen max-h-screen bg-[#0a0c12] text-slate-200 border-r border-white/[0.07] flex flex-col transition-all duration-300 ease-in-out shrink-0 select-none overflow-x-hidden ${
+          isSidebarOpen
+            ? "translate-x-0"
+            : "-translate-x-0 max-md:-translate-x-full"
+        } ${isCollapsed ? "md:w-[64px] w-68" : "w-68 md:w-[260px]"}`}
       >
-        {/* ========================================================= */}
-        {/* SIDEBAR HEADER & NEW PROJECT BUTTON                       */}
-        {/* ========================================================= */}
-        <div className={`border-b border-slate-800/80 transition-all duration-300 ${isCollapsed ? "p-3 space-y-2.5" : "p-4 space-y-3"}`}>
+        {/* TOP HEADER & NEW PROJECT CTA */}
+        <div
+          className={`border-b border-white/[0.06] ${
+            isCollapsed ? "p-2.5 space-y-2" : "p-3.5 space-y-3"
+          }`}
+        >
           {!isCollapsed ? (
-            /* EXPANDED HEADER */
             <>
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center font-bold text-white shadow-md shrink-0">
-                    T
-                  </div>
-                  <div className="min-w-0">
-                    <h2 className="font-bold text-white text-base leading-tight truncate">
-                      Template Studio
-                    </h2>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                      <span className="text-[11px] text-slate-400 truncate">Supabase PG</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Right controls: Sync status + Collapse Toggle Button */}
-                <div className="flex items-center gap-2 shrink-0">
-                  <div className="text-[11px] font-medium hidden sm:block">
-                    {saveStatus === "saving" && (
-                      <span className="text-amber-400 flex items-center gap-1">
-                        <span className="animate-spin text-xs">⟳</span> Saving
-                      </span>
-                    )}
-                    {saveStatus === "unsaved" && (
-                      <span className="text-amber-400 flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span> Unsaved
-                      </span>
-                    )}
-                    {saveStatus === "saved" && (
-                      <span className="text-emerald-400">Synced</span>
-                    )}
-                    {saveStatus === "error" && (
-                      <span className="text-rose-400">Error</span>
-                    )}
-                  </div>
-
-                  {/* Collapse Toggle Button */}
-                  {onToggleCollapse && (
-                    <button
-                      type="button"
-                      onClick={onToggleCollapse}
-                      title="Collapse sidebar (Ctrl+B)"
-                      aria-label="Collapse sidebar"
-                      className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition cursor-pointer"
+                <Link
+                  href="/"
+                  className="flex items-center gap-2 min-w-0 group"
+                >
+                  <div className="w-7 h-7 rounded-lg bg-white/[0.06] border border-white/[0.09] flex items-center justify-center text-slate-200 text-xs shrink-0 group-hover:bg-white group-hover:text-slate-950 transition">
+                    <svg
+                      className="w-3.5 h-3.5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
-                      </svg>
-                    </button>
-                  )}
-                </div>
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+                      />
+                    </svg>
+                  </div>
+                  <div className="min-w-0 flex items-center gap-2">
+                    <h2 className="font-bold text-white text-sm truncate">
+                      Projects
+                    </h2>
+                    <span className="text-[11px] font-mono text-slate-400 bg-white/[0.05] px-1.5 py-0.5 rounded-md">
+                      {projects.length}
+                    </span>
+                  </div>
+                </Link>
+
+                {onToggleCollapse && (
+                  <button
+                    type="button"
+                    onClick={onToggleCollapse}
+                    title="Collapse sidebar (Ctrl+B)"
+                    className="p-1.5 text-slate-400 hover:text-white hover:bg-white/[0.06] rounded-lg transition cursor-pointer"
+                  >
+                    <svg
+                      className="w-3.5 h-3.5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M11 19l-7-7 7-7m8 14l-7-7 7-7"
+                      />
+                    </svg>
+                  </button>
+                )}
               </div>
 
-              {/* Full New Project Button */}
               <button
                 onClick={onCreateProject}
-                className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-medium py-2.5 px-4 rounded-lg shadow-sm transition active:scale-[0.98] text-sm cursor-pointer"
+                className="w-full flex items-center justify-center gap-1.5 bg-white hover:bg-slate-200 text-slate-950 font-semibold py-2 px-3 rounded-xl transition active:scale-[0.98] text-xs cursor-pointer"
               >
                 <svg
-                  className="w-4 h-4"
+                  className="w-3.5 h-3.5"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -206,7 +195,7 @@ export function Sidebar({
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    strokeWidth={2}
+                    strokeWidth={2.5}
                     d="M12 4v16m8-8H4"
                   />
                 </svg>
@@ -214,33 +203,38 @@ export function Sidebar({
               </button>
             </>
           ) : (
-            /* COLLAPSED HEADER */
-            <div className="flex flex-col items-center gap-2.5">
-              {/* Expand Toggle Button */}
+            <div className="flex flex-col items-center gap-2">
               {onToggleCollapse && (
                 <button
                   type="button"
                   onClick={onToggleCollapse}
                   title="Expand sidebar (Ctrl+B)"
-                  aria-label="Expand sidebar"
-                  className="w-10 h-10 rounded-xl bg-slate-800/90 hover:bg-slate-800 hover:text-white text-slate-400 flex items-center justify-center transition cursor-pointer group shadow-sm"
+                  className="w-9 h-9 rounded-xl bg-white/[0.04] hover:bg-white/[0.09] text-slate-400 hover:text-white flex items-center justify-center transition cursor-pointer"
                 >
-                  <svg className="w-4 h-4 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                  <svg
+                    className="w-3.5 h-3.5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M13 5l7 7-7 7M5 5l7 7-7 7"
+                    />
                   </svg>
                 </button>
               )}
 
-              {/* Compact New Project Button */}
               <button
                 type="button"
                 onClick={onCreateProject}
                 title="New Project"
-                aria-label="New Project"
-                className="w-10 h-10 rounded-xl bg-blue-600 hover:bg-blue-500 text-white flex items-center justify-center transition active:scale-95 shadow-md shadow-blue-600/30 cursor-pointer"
+                className="w-9 h-9 rounded-xl bg-white hover:bg-slate-200 text-slate-950 flex items-center justify-center transition active:scale-95 cursor-pointer"
               >
                 <svg
-                  className="w-5 h-5"
+                  className="w-4 h-4"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -257,14 +251,12 @@ export function Sidebar({
           )}
         </div>
 
-        {/* ========================================================= */}
-        {/* SEARCH BAR                                                */}
-        {/* ========================================================= */}
-        {!isCollapsed ? (
-          <div className="p-3 border-b border-slate-800/80">
+        {/* SEARCH BAR */}
+        {!isCollapsed && (
+          <div className="px-3 pt-2.5 pb-1.5">
             <div className="relative">
               <svg
-                className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none"
+                className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -278,75 +270,36 @@ export function Sidebar({
               </svg>
               <input
                 type="text"
-                placeholder="Search projects..."
+                placeholder="Filter..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-slate-800/80 border border-slate-700/60 pl-9 pr-8 py-2 rounded-lg text-sm text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                className="w-full bg-white/[0.03] border border-white/[0.07] pl-8 pr-6 py-1.5 rounded-xl text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-white/[0.2] transition"
               />
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery("")}
-                  className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-200 text-xs p-0.5 rounded-full cursor-pointer"
-                  title="Clear search"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white text-xs cursor-pointer"
                 >
                   ✕
                 </button>
               )}
             </div>
           </div>
-        ) : (
-          <div className="p-2 border-b border-slate-800/80 flex justify-center">
-            <button
-              type="button"
-              onClick={onToggleCollapse}
-              title="Search projects (click to expand)"
-              aria-label="Search projects"
-              className="w-10 h-10 rounded-xl flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </button>
-          </div>
         )}
 
-        {/* ========================================================= */}
-        {/* PROJECT LIST HEADER                                       */}
-        {/* ========================================================= */}
-        {!isCollapsed ? (
-          <div className="px-4 py-2 flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-slate-400">
-            <span>Saved Projects</span>
-            <span className="bg-slate-800 px-2 py-0.5 rounded-full text-[11px] text-slate-300">
-              {filteredProjects.length}
-            </span>
-          </div>
-        ) : (
-          <div className="py-2 flex justify-center">
-            <span
-              className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-slate-800/80 text-slate-400"
-              title={`${filteredProjects.length} saved projects`}
-            >
-              {filteredProjects.length}
-            </span>
-          </div>
-        )}
-
-        {/* ========================================================= */}
-        {/* SCROLLABLE PROJECT LIST                                   */}
-        {/* ========================================================= */}
+        {/* SCROLLABLE PROJECT LIST */}
         <div
-          className={`flex-1 min-h-0 overflow-y-auto space-y-1.5 scrollbar-thin scrollbar-thumb-slate-700 ${
-            isCollapsed ? "px-2 py-1" : "px-3 py-1"
+          className={`flex-1 min-h-0 overflow-y-auto space-y-1 ${
+            isCollapsed ? "px-2 py-2" : "px-2.5 py-1.5"
           }`}
         >
           {isLoading ? (
             <div className="p-4 text-center text-slate-500 text-xs">
               <span className="inline-block animate-spin mr-1">⟳</span>
-              {!isCollapsed && "Loading..."}
             </div>
           ) : filteredProjects.length === 0 ? (
             <div className="p-4 text-center text-slate-500 text-xs">
-              {!isCollapsed ? (searchQuery ? "No matches." : "No projects yet.") : "—"}
+              {!isCollapsed ? "No projects" : "—"}
             </div>
           ) : (
             filteredProjects.map((project) => {
@@ -355,90 +308,54 @@ export function Sidebar({
               const initials = cleanName.trim().substring(0, 2).toUpperCase();
 
               if (isCollapsed) {
-                /* COLLAPSED PROJECT ITEM */
                 return (
-                  <div
+                  <button
+                    type="button"
                     key={project.id}
                     onClick={() => onSelectProject(project.id)}
-                    title={`${cleanName} (${project.sections.length} ${
-                      project.sections.length === 1 ? "section" : "sections"
-                    })`}
-                    className={`w-10 h-10 mx-auto rounded-xl flex items-center justify-center cursor-pointer transition text-xs font-bold ${
+                    title={cleanName}
+                    className={`w-9 h-9 mx-auto rounded-xl flex items-center justify-center cursor-pointer transition text-xs font-bold ${
                       isActive
-                        ? "bg-blue-600 text-white shadow-lg shadow-blue-600/40 ring-2 ring-blue-400/50 scale-105"
-                        : "bg-slate-800/70 text-slate-300 hover:bg-slate-800 hover:text-white"
+                        ? "bg-white/[0.14] text-white border border-white/[0.22]"
+                        : "bg-white/[0.03] text-slate-400 hover:bg-white/[0.08] hover:text-white border border-transparent"
                     }`}
                   >
                     <span>{initials}</span>
-                  </div>
+                  </button>
                 );
               }
 
-              /* EXPANDED PROJECT ITEM */
               return (
                 <div
                   key={project.id}
                   onClick={() => onSelectProject(project.id)}
-                  className={`group relative flex items-center justify-between p-3 rounded-lg cursor-pointer transition text-sm ${
+                  className={`group flex items-center justify-between px-2.5 py-2 rounded-xl cursor-pointer transition text-xs ${
                     isActive
-                      ? "bg-blue-600 text-white font-semibold shadow-md"
-                      : "text-slate-300 hover:bg-slate-800/80 hover:text-white"
+                      ? "bg-white/[0.1] text-white font-semibold border border-white/[0.14]"
+                      : "text-slate-400 hover:bg-white/[0.04] hover:text-white border border-transparent"
                   }`}
                 >
                   <div className="flex items-center gap-2.5 min-w-0 pr-2">
-                    <svg
-                      className={`w-4 h-4 shrink-0 ${
-                        isActive ? "text-white" : "text-slate-400 group-hover:text-slate-300"
+                    <div
+                      className={`w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                        isActive
+                          ? "bg-white text-slate-950"
+                          : "bg-white/[0.05] text-slate-400 group-hover:text-slate-200"
                       }`}
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
                     >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                      />
-                    </svg>
-                    <div className="min-w-0">
-                      <p className="truncate leading-snug">{cleanName}</p>
-                      <p
-                        className={`text-[11px] truncate ${
-                          isActive ? "text-blue-100" : "text-slate-500"
-                        }`}
-                      >
-                        {project.sections.length}{" "}
-                        {project.sections.length === 1 ? "section" : "sections"}
-                      </p>
+                      {initials}
                     </div>
+                    <span className="truncate">{cleanName}</span>
                   </div>
 
-                  {/* Accessible delete button (Only if Owner or Full Access) */}
-                  {(project.isOwner !== false || project.currentUserPermission === "full") && (
+                  {(project.isOwner !== false ||
+                    project.currentUserPermission === "full") && (
                     <button
                       onClick={(e) => onDeleteProject(e, project)}
                       title="Delete project"
-                      aria-label={`Delete ${cleanName}`}
-                      className={`p-1.5 rounded transition shrink-0 cursor-pointer ${
-                        isActive
-                          ? "text-blue-200 hover:text-white hover:bg-blue-700/80"
-                          : "text-slate-400 hover:text-red-400 hover:bg-slate-700"
-                      }`}
+                      className="opacity-0 group-hover:opacity-100 p-1 rounded-md text-slate-500 hover:text-rose-400 transition shrink-0 cursor-pointer"
                     >
-                      <svg
-                        className="w-4 h-4"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                        />
-                      </svg>
+                      ✕
                     </button>
                   )}
                 </div>
@@ -447,87 +364,86 @@ export function Sidebar({
           )}
         </div>
 
-        {/* ========================================================= */}
-        {/* FOOTER INFO & LOGOUT                                      */}
-        {/* ========================================================= */}
-        <div className={`border-t border-slate-800 text-[11px] text-slate-400 mt-auto shrink-0 bg-slate-900 ${isCollapsed ? "p-2.5" : "p-3 space-y-2"}`}>
+        {/* BOTTOM ACCOUNT & ACTION FOOTER */}
+        <div
+          className={`border-t border-white/[0.06] bg-[#07090e] shrink-0 ${
+            isCollapsed ? "p-2" : "p-3 space-y-2.5"
+          }`}
+        >
           {!isCollapsed ? (
-            /* EXPANDED FOOTER */
             <>
-              {/* USER PROFILE BADGE */}
-              <Link
-                href="/settings/profile"
-                title="Manage Profile Settings"
-                className="flex items-center gap-2.5 px-2.5 py-2 rounded-xl bg-slate-950/70 hover:bg-slate-800/80 border border-slate-800/90 hover:border-slate-700 transition group cursor-pointer mb-1"
-              >
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-sm shadow-sm shrink-0 border border-blue-400/30">
-                  <span>{userAvatar || "👤"}</span>
-                </div>
-                <div className="flex-1 min-w-0 text-left">
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="text-xs font-semibold text-slate-200 group-hover:text-blue-400 transition truncate">
-                      {userFullName || userName || "User"}
-                    </span>
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" title="Online" />
-                  </div>
-                  <span className="text-[10px] text-slate-500 block truncate group-hover:text-slate-400">
-                    @{userName ? userName.toLowerCase() : "account"}
-                  </span>
-                </div>
-                <svg
-                  className="w-3.5 h-3.5 text-slate-500 group-hover:text-slate-300 transition shrink-0"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </Link>
-
-              <div className="flex items-center justify-between text-slate-500 text-[10px] px-0.5">
-                <span className="flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                  Database: Supabase PG
-                </span>
-                <span>v1.0</span>
-              </div>
-
-              <div className="grid grid-cols-3 gap-1.5 pt-0.5">
-                <Link
-                  href="/"
-                  title="Workspace Hub"
-                  className="flex items-center justify-center py-1.5 px-2 bg-slate-800/80 hover:bg-slate-800 hover:text-white text-slate-300 rounded-md transition text-xs font-medium cursor-pointer"
-                >
-                  Hub
-                </Link>
-                <Link
-                  href="/notifications"
-                  title="Task Notifications"
-                  className="relative flex items-center justify-center py-1.5 px-2 bg-slate-800/80 hover:bg-slate-800 hover:text-white text-slate-300 rounded-md transition text-xs font-medium cursor-pointer"
-                >
-                  <span>Alerts</span>
-                  {unreadNotifs > 0 && (
-                    <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[16px] h-[16px] px-1 text-[9px] font-extrabold text-white bg-rose-600 rounded-full border border-slate-950 animate-pulse">
-                      {unreadNotifs > 9 ? "9+" : unreadNotifs}
-                    </span>
-                  )}
-                </Link>
+              <div className="grid grid-cols-2 gap-2">
                 <Link
                   href="/settings"
-                  title="Theme & Settings"
-                  className="flex items-center justify-center py-1.5 px-2 bg-slate-800/80 hover:bg-slate-800 hover:text-blue-400 text-slate-300 rounded-md transition text-xs font-medium cursor-pointer"
+                  title="Settings"
+                  className="flex items-center justify-center h-9 rounded-xl bg-white/[0.03] hover:bg-white/[0.08] border border-white/[0.06] text-slate-300 hover:text-white transition"
                 >
-                  Settings
+                  <svg
+                    className="w-[18px] h-[18px]"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={1.8}
+                      d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                    />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={1.8}
+                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                    />
+                  </svg>
                 </Link>
+
+                <button
+                  onClick={onLogout}
+                  title="Log Out"
+                  className="flex items-center justify-center h-9 rounded-xl bg-white/[0.03] hover:bg-rose-500/15 border border-white/[0.06] hover:border-rose-500/25 text-slate-300 hover:text-rose-400 transition cursor-pointer"
+                >
+                  <svg
+                    className="w-[18px] h-[18px]"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={1.8}
+                      d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                    />
+                  </svg>
+                </button>
               </div>
 
-              <button
-                onClick={onLogout}
-                title="Log out of Template Studio"
-                className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 bg-slate-800/80 hover:bg-slate-800 hover:text-red-400 text-slate-300 rounded-md transition text-xs font-medium cursor-pointer"
+              <div className="pt-1.5 border-t border-white/[0.06]">
+                <Link
+                  href="/settings/profile"
+                  title="Profile"
+                  className="flex items-center gap-2.5 px-2 py-1.5 rounded-xl hover:bg-white/[0.05] transition min-w-0"
+                >
+                  <div className="w-6 h-6 rounded-full bg-white/[0.08] flex items-center justify-center text-[10px] font-bold text-slate-200 shrink-0">
+                    {(userFullName || userName || "U").slice(0, 1).toUpperCase()}
+                  </div>
+                  <p className="text-xs font-medium text-slate-300 truncate">
+                    {userFullName || userName || "Account"}
+                  </p>
+                </Link>
+              </div>
+            </>
+          ) : (
+            <div className="flex flex-col items-center gap-1.5">
+              <Link
+                href="/"
+                title="Home Hub"
+                className="w-9 h-9 rounded-xl bg-white/[0.03] hover:bg-white/[0.08] text-slate-400 hover:text-white flex items-center justify-center transition"
               >
                 <svg
-                  className="w-3.5 h-3.5"
+                  className="w-4 h-4"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -535,84 +451,56 @@ export function Sidebar({
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                    strokeWidth={1.8}
+                    d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
                   />
                 </svg>
-                <span>Log Out</span>
-              </button>
-            </>
-          ) : (
-            /* COLLAPSED FOOTER */
-            <div className="flex flex-col items-center gap-2">
-              <Link
-                href="/settings/profile"
-                title={`Profile: ${userFullName || userName || "account"} (@${userName || "account"})`}
-                className="w-10 h-10 rounded-xl bg-slate-950/80 hover:bg-slate-800 text-slate-200 flex items-center justify-center transition border border-slate-800 hover:border-slate-700 shadow-sm relative group cursor-pointer"
-                aria-label={`Profile: ${userFullName || userName || "account"} (@${userName || "account"})`}
-              >
-                <span className="text-base">{userAvatar || "👤"}</span>
-                <span className="absolute bottom-1 right-1 w-2 h-2 rounded-full bg-emerald-400 border border-slate-900" />
               </Link>
-
               <Link
-                href="/notifications"
-                title={`Notifications (${unreadNotifs} unread)`}
-                className="relative w-10 h-10 rounded-xl bg-slate-800/80 hover:bg-slate-800 hover:text-white text-slate-300 flex items-center justify-center transition cursor-pointer"
-                aria-label="Notifications"
+                href="/settings"
+                title="Settings"
+                className="w-9 h-9 rounded-xl bg-white/[0.03] hover:bg-white/[0.08] text-slate-400 hover:text-white flex items-center justify-center transition"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
+                    strokeWidth={1.8}
+                    d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                  />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.8}
+                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
                   />
                 </svg>
-                {unreadNotifs > 0 && (
-                  <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-rose-500 animate-pulse border border-slate-900" />
-                )}
               </Link>
-
-              <Link
-                href="/"
-                title="Workspace Hub"
-                className="w-10 h-10 rounded-xl bg-slate-800/80 hover:bg-slate-800 hover:text-white text-slate-300 flex items-center justify-center transition cursor-pointer"
-                aria-label="Workspace Hub"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                </svg>
-              </Link>
-
-              <Link
-                href="/settings"
-                title="Theme & Settings"
-                className="w-10 h-10 rounded-xl bg-slate-800/80 hover:bg-slate-800 hover:text-blue-400 text-slate-300 flex items-center justify-center transition cursor-pointer"
-                aria-label="Settings"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-              </Link>
-
               <button
                 type="button"
                 onClick={onLogout}
                 title="Log Out"
-                className="w-10 h-10 rounded-xl bg-slate-800/80 hover:bg-slate-800 hover:text-red-400 text-slate-300 flex items-center justify-center transition cursor-pointer"
-                aria-label="Log Out"
+                className="w-9 h-9 rounded-xl bg-white/[0.03] hover:bg-rose-500/15 text-slate-400 hover:text-rose-400 flex items-center justify-center transition cursor-pointer"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.8}
+                    d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                  />
                 </svg>
               </button>
-
-              <span
-                className="w-2 h-2 rounded-full bg-emerald-400 mt-0.5"
-                title="Connected to Supabase"
-              />
             </div>
           )}
         </div>

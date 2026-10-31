@@ -465,7 +465,27 @@ export function TaskNotepad({
   }, [project.statusStages]);
 
   const getStageConfig = React.useCallback(
-    (stageSlug: string) => resolveStageConfig(stageSlug, projectStages),
+    (stageSlug: string) => {
+      const base = resolveStageConfig(stageSlug, projectStages);
+      const isDone = base.slug === "completed" || base.slug === "done";
+      const isStopped = base.slug === "stopped" || base.slug === "blocked";
+      return {
+        ...base,
+        badgeClass: isDone
+          ? "bg-white/[0.08] text-white border-white/[0.16]"
+          : isStopped
+          ? "bg-white/[0.03] text-slate-400 border-white/[0.08]"
+          : "bg-white/[0.05] text-slate-200 border-white/[0.12]",
+        dotClass: isDone
+          ? "bg-white"
+          : isStopped
+          ? "bg-slate-500"
+          : "bg-slate-300",
+        borderClass: "border-white/[0.22]",
+        bgHoverClass: "hover:border-white/[0.14]",
+        ringClass: "ring-white/[0.15] border-white/[0.25]",
+      };
+    },
     [projectStages]
   );
 
@@ -1969,7 +1989,7 @@ export function TaskNotepad({
     return (
       <tr
         key={task.id}
-        className="group border-b border-slate-800/60 hover:bg-slate-800/40 transition-colors"
+        className="group border-b border-white/[0.07]/60 hover:bg-slate-800/40 transition-colors"
       >
         {/* Status / Checkbox */}
         <td className="py-3 px-3.5 w-12 text-center align-middle">
@@ -1984,8 +2004,8 @@ export function TaskNotepad({
               isReadOnly ? "cursor-not-allowed opacity-60" : "cursor-pointer active:scale-95"
             } ${
               isTaskDone
-                ? "bg-emerald-600 border-emerald-500 text-white shadow-sm"
-                : "border-slate-600 bg-slate-800/80 hover:border-blue-400 text-transparent"
+                ? "bg-white border-white text-slate-950 shadow-sm"
+                : "border-slate-600 bg-slate-800/80 hover:border-white/[0.3] text-transparent"
             }`}
             title={
               isReadOnly
@@ -2015,7 +2035,7 @@ export function TaskNotepad({
             <button
               type="button"
               onClick={() => setActiveDetailTaskId(task.id)}
-              className="text-left font-semibold hover:text-blue-400 transition-colors flex items-center gap-2 group/title cursor-pointer max-w-full"
+              className="text-left font-semibold hover:text-white transition-colors flex items-center gap-2 group/title cursor-pointer max-w-full"
               title="Click to view full task details & comments in side modal"
             >
               <span
@@ -2024,12 +2044,12 @@ export function TaskNotepad({
                     ? "line-through text-slate-500"
                     : task.stage === "stopped" || task.stage === "blocked"
                     ? "text-slate-300 group-hover/title:text-rose-400"
-                    : "text-slate-100 group-hover/title:text-blue-400"
+                    : "text-slate-100 group-hover/title:text-white"
                 }`}
               >
                 {taskHeading}
               </span>
-              <span className="opacity-0 group-hover/title:opacity-100 transition-opacity text-blue-400 text-xs shrink-0 flex items-center gap-0.5">
+              <span className="opacity-0 group-hover/title:opacity-100 transition-opacity text-slate-400 text-xs shrink-0 flex items-center gap-0.5">
                 <span>view</span>
                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -2042,10 +2062,10 @@ export function TaskNotepad({
                   e.stopPropagation();
                   setActiveFolder(task.folder!);
                 }}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-blue-950/70 border border-blue-500/30 text-blue-300 hover:bg-blue-900/80 cursor-pointer transition shrink-0"
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-white/[0.04] border border-white/[0.08] text-slate-300 hover:bg-white/[0.08] cursor-pointer transition shrink-0"
                 title={`Folder: ${task.folder}. Click to filter`}
               >
-                📁 {task.folder}
+                {task.folder}
               </span>
             )}
             {task.attachments && task.attachments.length > 0 && (
@@ -2054,10 +2074,10 @@ export function TaskNotepad({
                   e.stopPropagation();
                   setActiveDetailTaskId(task.id);
                 }}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-blue-950/70 border border-blue-500/30 text-blue-300 hover:bg-blue-900/80 cursor-pointer transition shrink-0"
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-white/[0.04] border border-white/[0.08] text-slate-300 hover:bg-white/[0.08] cursor-pointer transition shrink-0"
                 title={`${task.attachments.length} image attachment(s). Click to view.`}
               >
-                <span>🖼️</span>
+                <span>Img</span>
                 <span>{task.attachments.length}</span>
               </span>
             )}
@@ -2067,11 +2087,10 @@ export function TaskNotepad({
                   e.stopPropagation();
                   setActiveDetailTaskId(task.id);
                 }}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-blue-950/80 border border-blue-500/40 text-blue-300 hover:bg-blue-900/90 cursor-pointer transition shrink-0 shadow-sm"
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-white/[0.04] border border-white/[0.08] text-slate-300 hover:bg-white/[0.08] cursor-pointer transition shrink-0 shadow-sm"
                 title="Voice explanation available. Click to listen."
               >
-                <span>🎙️</span>
-                <span>Voice Note</span>
+                <span>Audio</span>
               </span>
             )}
           </div>
@@ -2084,12 +2103,12 @@ export function TaskNotepad({
             onClick={() => setActiveDetailTaskId(task.id)}
             className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium transition cursor-pointer ${
               hasComments
-                ? "bg-blue-500/10 text-blue-300 border border-blue-500/30 hover:bg-blue-500/20"
+                ? "bg-white/[0.05] text-slate-200 border border-white/[0.1] hover:bg-white/[0.09]"
                 : "text-slate-500 hover:text-slate-400 hover:bg-slate-800/60 border border-transparent"
             }`}
             title={hasComments ? `${taskComments.length} comment${taskComments.length > 1 ? "s" : ""}. Click to view` : "No comments yet. Click to add"}
           >
-            <svg className="w-3.5 h-3.5 text-blue-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-3.5 h-3.5 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
             </svg>
             <span>{taskComments.length}</span>
@@ -2099,8 +2118,8 @@ export function TaskNotepad({
         {/* Dates / Timeline */}
         <td className="py-3 px-3 w-44 text-center align-middle">
           {hasTimeline ? (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-950/80 border border-slate-800 text-[11px] text-slate-300 font-mono">
-              <svg className="w-3 h-3 text-blue-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#07090e]/80 border border-white/[0.07] text-[11px] text-slate-300 font-mono">
+              <svg className="w-3 h-3 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
               <span>
@@ -2130,7 +2149,7 @@ export function TaskNotepad({
                 const slug = stg.slug || stg.id;
                 const c = getStageConfig(slug);
                 return (
-                  <option key={slug} value={slug} className="bg-slate-900 text-slate-100">
+                  <option key={slug} value={slug} className="bg-[#0d1017] text-slate-100">
                     {c.label}
                   </option>
                 );
@@ -2151,7 +2170,7 @@ export function TaskNotepad({
             <button
               type="button"
               onClick={() => setActiveDetailTaskId(task.id)}
-              className="p-1.5 text-slate-400 hover:text-blue-400 hover:bg-slate-800 rounded-lg transition cursor-pointer"
+              className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition cursor-pointer"
               title="Open task details from right side"
               aria-label="View task details"
             >
@@ -2197,15 +2216,13 @@ export function TaskNotepad({
   };
 
   return (
-    <div className="bg-slate-900 p-6 sm:p-8 rounded-xl shadow-md border border-slate-800 space-y-6 flex flex-col min-h-[680px] relative">
+    <div className="bg-[#0d1017] p-4 sm:p-6 rounded-2xl border border-white/[0.07] space-y-5 flex flex-col min-h-[640px] relative">
       {/* HEADER SECTION */}
-      <div className="border-b border-slate-800 pb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="border-b border-white/[0.07] pb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2.5 flex-wrap">
-            <h1 className="text-2xl font-bold text-white tracking-tight">
-              Project Tasks & Notepad
-            </h1>
-            <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-950/60 text-blue-400 font-medium border border-blue-500/30 truncate max-w-[220px]">
+            <h1 className="text-base font-bold text-white tracking-tight">Tasks</h1>
+            <span className="text-xs px-2.5 py-0.5 rounded-full bg-white/[0.05] text-slate-300 font-medium border border-white/[0.08] truncate max-w-[220px]">
               {project.name}
             </span>
             {role !== "owner" && (
@@ -2215,7 +2232,7 @@ export function TaskNotepad({
                     ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
                     : role === "edit_no_delete"
                     ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
-                    : "bg-blue-500/10 text-blue-400 border-blue-500/30"
+                    : "bg-white/[0.05] text-slate-400 border-white/[0.08]"
                 }`}
               >
                 {role === "full"
@@ -2226,8 +2243,8 @@ export function TaskNotepad({
               </span>
             )}
             {isDbLoading && (
-              <span className="text-[11px] text-blue-400 animate-pulse flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span> Loading tasks...
+              <span className="text-[11px] text-slate-400 animate-pulse flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-white"></span> Loading tasks...
               </span>
             )}
             {dbNotice && (
@@ -2236,21 +2253,18 @@ export function TaskNotepad({
               </span>
             )}
           </div>
-          <p className="text-sm text-slate-400 mt-1">
-            Manage your project tasks across the 3 stages: In Progress, Completed, and Stopped.
-          </p>
         </div>
 
         {/* TOP ACTION BUTTONS */}
         <div className="flex items-center flex-wrap gap-2">
           {/* View Mode Toggle: List / Grouped / Notepad */}
-          <div className="bg-slate-950 p-0.5 rounded-lg border border-slate-800 flex items-center">
+          <div className="bg-[#07090e] p-0.5 rounded-lg border border-white/[0.07] flex items-center">
             <button
               type="button"
               onClick={() => handleSwitchMode("list")}
               className={`px-3 py-1.5 text-xs font-semibold rounded-md transition flex items-center gap-1.5 cursor-pointer ${
                 viewMode === "list"
-                  ? "bg-blue-600 text-white shadow-sm"
+                  ? "bg-white/[0.12] text-white"
                   : "text-slate-400 hover:text-white"
               }`}
               title="List View"
@@ -2266,7 +2280,7 @@ export function TaskNotepad({
               onClick={() => handleSwitchMode("grouped")}
               className={`px-3 py-1.5 text-xs font-semibold rounded-md transition flex items-center gap-1.5 cursor-pointer ${
                 viewMode === "grouped"
-                  ? "bg-blue-600 text-white shadow-sm"
+                  ? "bg-white/[0.12] text-white"
                   : "text-slate-400 hover:text-white"
               }`}
               title="Grouped by Stage"
@@ -2287,7 +2301,7 @@ export function TaskNotepad({
               onClick={() => handleSwitchMode("notepad")}
               className={`px-3 py-1.5 text-xs font-semibold rounded-md transition flex items-center gap-1.5 cursor-pointer ${
                 viewMode === "notepad"
-                  ? "bg-blue-600 text-white shadow-sm"
+                  ? "bg-white/[0.12] text-white"
                   : "text-slate-400 hover:text-white"
               }`}
               title="Raw Notepad / Markdown"
@@ -2309,25 +2323,17 @@ export function TaskNotepad({
             <button
               onClick={handleManualSave}
               type="button"
-              className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition shadow-sm shadow-blue-600/30 cursor-pointer active:scale-95"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-medium bg-[#10131c] hover:bg-white/[0.06] text-slate-200 hover:text-white border border-white/[0.08] rounded-lg transition cursor-pointer active:scale-95"
               title="Save tasks to database immediately"
             >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"
-                />
-              </svg>
-              <span>{justSaved ? "Saved!" : "Save Now"}</span>
+              <span>{justSaved ? "Saved" : "Save"}</span>
             </button>
           )}
         </div>
       </div>
 
       {/* TASK FOLDERS TAB BAR */}
-      <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-2.5 flex items-center justify-between gap-3 overflow-hidden">
+      <div className="bg-[#07090e] border border-white/[0.07] rounded-xl p-2 flex items-center justify-between gap-3 overflow-hidden">
         <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-thin py-0.5 min-w-0 flex-1">
           {/* All Tasks Tab */}
           <button
@@ -2335,14 +2341,13 @@ export function TaskNotepad({
             onClick={() => setActiveFolder("all")}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 shrink-0 cursor-pointer ${
               activeFolder === "all"
-                ? "bg-blue-600 text-white shadow-sm shadow-blue-600/30"
-                : "text-slate-400 hover:text-slate-200 hover:bg-slate-900 border border-transparent"
+                ? "bg-white text-slate-950"
+                : "text-slate-400 hover:text-slate-200 hover:bg-[#0d1017] border border-transparent"
             }`}
           >
-            <span>📁</span>
             <span>All Tasks</span>
             <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
-              activeFolder === "all" ? "bg-blue-700 text-white" : "bg-slate-800 text-slate-400"
+              activeFolder === "all" ? "bg-slate-950/15 text-slate-950" : "bg-white/[0.06] text-slate-400"
             }`}>
               {tasks.length}
             </span>
@@ -2356,10 +2361,10 @@ export function TaskNotepad({
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 shrink-0 cursor-pointer ${
                 activeFolder === "general"
                   ? "bg-slate-700 text-white shadow-sm"
-                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-900 border border-transparent"
+                  : "text-slate-400 hover:text-slate-200 hover:bg-[#0d1017] border border-transparent"
               }`}
             >
-              <span>📁</span>
+              
               <span>General</span>
               <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-400">
                 {tasks.filter((t) => !t.folder || t.folder.trim() === "").length}
@@ -2376,8 +2381,8 @@ export function TaskNotepad({
                 key={f}
                 className={`group flex items-center rounded-lg transition shrink-0 ${
                   isActive
-                    ? "bg-blue-600/20 border border-blue-500/50 text-blue-300"
-                    : "bg-slate-900/60 hover:bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200"
+                    ? "bg-white text-slate-950 border border-white"
+                    : "bg-[#0d1017]/60 hover:bg-[#0d1017] border border-white/[0.07] text-slate-400 hover:text-slate-200"
                 }`}
               >
                 <button
@@ -2385,10 +2390,10 @@ export function TaskNotepad({
                   onClick={() => setActiveFolder(f)}
                   className="px-3 py-1.5 text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
                 >
-                  <span>📁</span>
+                  
                   <span>{f}</span>
                   <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
-                    isActive ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-400"
+                    isActive ? "bg-white text-slate-950" : "bg-slate-800 text-slate-400"
                   }`}>
                     {count}
                   </span>
@@ -2453,10 +2458,10 @@ export function TaskNotepad({
             if (viewMode === "notepad") setViewMode("list");
             setFilterStage("all");
           }}
-          className={`bg-slate-950/70 border rounded-xl p-3 flex flex-col justify-between transition cursor-pointer ${
+          className={`bg-[#07090e]/70 border rounded-xl p-3 flex flex-col justify-between transition cursor-pointer ${
             filterStage === "all" && viewMode === "list"
-              ? "border-blue-500/60 ring-1 ring-blue-500/30"
-              : "border-slate-800 hover:border-slate-700"
+              ? "border-white/[0.25] bg-white/[0.04]"
+              : "border-white/[0.07] hover:border-slate-700"
           }`}
           title="Show All Tasks"
         >
@@ -2477,10 +2482,10 @@ export function TaskNotepad({
                 if (viewMode === "notepad") setViewMode("list");
                 setFilterStage((prev) => (prev === slug ? "all" : slug));
               }}
-              className={`bg-slate-950/70 border rounded-xl p-3 flex flex-col justify-between transition cursor-pointer ${
+              className={`bg-[#07090e]/70 border rounded-xl p-3 flex flex-col justify-between transition cursor-pointer ${
                 isFilterActive
                   ? `${cfg.borderClass} ${cfg.ringClass} ring-1`
-                  : `border-slate-800 ${cfg.bgHoverClass}`
+                  : `border-white/[0.07] ${cfg.bgHoverClass}`
               }`}
               title={isFilterActive ? "Clear filter (Show all)" : `Filter by ${cfg.label}`}
             >
@@ -2497,31 +2502,11 @@ export function TaskNotepad({
         })}
       </div>
 
-      {/* MULTI-SEGMENT PROGRESS BAR */}
-      {totalCount > 0 && (
-        <div className="space-y-1.5">
-          <div className="h-2 w-full bg-slate-950 rounded-full overflow-hidden flex border border-slate-800/80">
-            {stageMetrics.map(({ stage, slug, pct, cfg }) => {
-              if (pct <= 0) return null;
-              const bgClass = cfg.dotClass.split(" ")[0] || "bg-blue-500";
-              return (
-                <div
-                  key={slug}
-                  style={{ width: `${pct}%` }}
-                  className={`${bgClass} transition-all duration-300`}
-                  title={`${cfg.label}: ${pct}%`}
-                />
-              );
-            })}
-          </div>
-        </div>
-      )}
-
       {/* NOTEPAD RAW VIEW - STRICTLY READ-ONLY */}
       {viewMode === "notepad" ? (
-        <div className="flex-1 flex flex-col relative rounded-xl border border-slate-800 bg-slate-950 shadow-inner overflow-hidden">
+        <div className="flex-1 flex flex-col relative rounded-xl border border-white/[0.07] bg-[#07090e] shadow-inner overflow-hidden">
           {/* Top Info Bar */}
-          <div className="px-4 py-2.5 bg-slate-900/90 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="px-4 py-2.5 bg-[#0d1017]/90 border-b border-white/[0.07] flex flex-wrap items-center justify-between gap-3 text-xs">
             <div className="flex items-center gap-2">
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-500/10 text-amber-300 border border-amber-500/30 font-semibold text-[11px]">
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2564,7 +2549,7 @@ export function TaskNotepad({
             readOnly={true}
             value={tasksToMarkdown(tasks)}
             placeholder="No tasks to display in notepad view."
-            className="w-full flex-1 min-h-[460px] p-5 sm:p-6 bg-slate-950/70 text-slate-200 placeholder:text-slate-600 font-mono text-sm leading-relaxed outline-none resize-none cursor-default select-text"
+            className="w-full flex-1 min-h-[460px] p-5 sm:p-6 bg-[#07090e]/70 text-slate-200 placeholder:text-slate-600 font-mono text-sm leading-relaxed outline-none resize-none cursor-default select-text"
             spellCheck={false}
           />
         </div>
@@ -2572,7 +2557,7 @@ export function TaskNotepad({
         /* LIST / GROUPED VIEWS */
         <div className="flex-1 flex flex-col space-y-4">
           {/* TOP ACTION & SEARCH TOOLBAR */}
-          <div className="flex items-center gap-2.5 sm:gap-3 p-2.5 sm:p-3 bg-slate-950 rounded-xl border border-slate-800">
+          <div className="flex items-center gap-2.5 sm:gap-3 p-2.5 sm:p-3 bg-[#07090e] rounded-xl border border-white/[0.07]">
             {/* Wider Search Input */}
             <div className="relative flex-1 min-w-0">
               <input
@@ -2580,7 +2565,7 @@ export function TaskNotepad({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search tasks..."
-                className="w-full bg-slate-900 border border-slate-800 text-xs sm:text-sm text-white rounded-lg pl-8 sm:pl-9 pr-8 py-2 placeholder:text-slate-500 focus:outline-none focus:border-blue-500 transition"
+                className="w-full bg-[#0d1017] border border-white/[0.07] text-xs sm:text-sm text-white rounded-lg pl-8 sm:pl-9 pr-8 py-2 placeholder:text-slate-500 focus:outline-none focus:border-white/[0.22] transition"
               />
               <div className="absolute inset-y-0 left-0 pl-2.5 sm:pl-3 flex items-center pointer-events-none text-slate-500">
                 <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2611,7 +2596,7 @@ export function TaskNotepad({
               <button
                 type="button"
                 onClick={() => openCreateForm()}
-                className="flex items-center gap-1.5 px-4 py-2 text-xs sm:text-sm font-semibold bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition shadow-sm cursor-pointer active:scale-95 flex-shrink-0"
+                className="flex items-center gap-1.5 px-4 py-2 text-xs sm:text-sm font-semibold bg-white hover:bg-slate-200 !text-slate-950 text-white rounded-lg transition shadow-sm cursor-pointer active:scale-95 flex-shrink-0"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
@@ -2626,8 +2611,8 @@ export function TaskNotepad({
             /* TABULAR LIST VIEW */
             <div>
               {filteredTasks.length === 0 ? (
-                <div className="py-12 px-4 text-center rounded-xl border border-dashed border-slate-800 bg-slate-950/40 text-slate-400 space-y-3">
-                  <div className="w-12 h-12 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center mx-auto text-slate-500">
+                <div className="py-12 px-4 text-center rounded-xl border border-dashed border-white/[0.07] bg-[#07090e]/40 text-slate-400 space-y-3">
+                  <div className="w-12 h-12 rounded-full bg-[#0d1017] border border-white/[0.07] flex items-center justify-center mx-auto text-slate-500">
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path
                         strokeLinecap="round"
@@ -2653,18 +2638,18 @@ export function TaskNotepad({
                     <button
                       type="button"
                       onClick={() => openCreateForm()}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition shadow-sm cursor-pointer"
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold bg-white hover:bg-slate-200 !text-slate-950 text-white rounded-lg transition shadow-sm cursor-pointer"
                     >
                       <span>+ Add Task</span>
                     </button>
                   )}
                 </div>
               ) : (
-                <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950/40 shadow-sm">
+                <div className="overflow-hidden rounded-xl border border-white/[0.07] bg-[#07090e]/40 shadow-sm">
                   <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                       <thead>
-                        <tr className="border-b border-slate-800 bg-slate-950/90 text-[11px] font-semibold text-slate-400 uppercase tracking-wider select-none">
+                        <tr className="border-b border-white/[0.07] bg-[#07090e]/90 text-[11px] font-semibold text-slate-400 uppercase tracking-wider select-none">
                           <th className="py-3 px-3.5 w-12 text-center">Status</th>
                           <th className="py-3 px-3 min-w-[200px]">Task Heading</th>
                           <th className="py-3 px-3 w-28 text-center">Comments</th>
@@ -2673,7 +2658,7 @@ export function TaskNotepad({
                           <th className="py-3 px-3 w-28 text-right">Actions</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-800/60 text-xs">
+                      <tbody className="divide-y divide-white/[0.06] text-xs">
                         {filteredTasks.map((task) => renderTaskTableRow(task))}
                       </tbody>
                     </table>
@@ -2692,10 +2677,10 @@ export function TaskNotepad({
                 return (
                   <div
                     key={stg}
-                    className="bg-slate-950/60 rounded-xl border border-slate-800/80 p-4 space-y-3"
+                    className="bg-[#07090e]/60 rounded-xl border border-white/[0.07]/80 p-4 space-y-3"
                   >
                     {/* Stage Header */}
-                    <div className="flex items-center justify-between border-b border-slate-800/80 pb-2.5">
+                    <div className="flex items-center justify-between border-b border-white/[0.07]/80 pb-2.5">
                       <div className="flex items-center gap-2">
                         <span className={`w-2 h-2 rounded-full ${cfg.dotClass}`} />
                         <h3 className="text-sm font-bold text-white tracking-wide">
@@ -2710,7 +2695,7 @@ export function TaskNotepad({
                         <button
                           type="button"
                           onClick={() => openCreateForm(stg)}
-                          className="text-xs text-blue-400 hover:text-blue-300 transition flex items-center gap-1 cursor-pointer font-medium"
+                          className="text-xs text-slate-300 hover:text-white transition flex items-center gap-1 cursor-pointer font-medium"
                         >
                           <span>+ Add to {cfg.label}</span>
                         </button>
@@ -2723,11 +2708,11 @@ export function TaskNotepad({
                         No tasks currently in {cfg.label.toLowerCase()}. Click &quot;+ Add to {cfg.label}&quot; to create one.
                       </p>
                     ) : (
-                      <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/40">
+                      <div className="overflow-hidden rounded-xl border border-white/[0.07] bg-[#0d1017]/40">
                         <div className="overflow-x-auto">
                           <table className="w-full text-left border-collapse">
                             <thead>
-                              <tr className="border-b border-slate-800 bg-slate-950/70 text-[10px] font-semibold text-slate-400 uppercase tracking-wider select-none">
+                              <tr className="border-b border-white/[0.07] bg-[#07090e]/70 text-[10px] font-semibold text-slate-400 uppercase tracking-wider select-none">
                                 <th className="py-2.5 px-3 w-12 text-center">Status</th>
                                 <th className="py-2.5 px-3 min-w-[200px]">Task Heading</th>
                                 <th className="py-2.5 px-3 w-28 text-center">Comments</th>
@@ -2736,7 +2721,7 @@ export function TaskNotepad({
                                 <th className="py-2.5 px-3 w-28 text-right">Actions</th>
                               </tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-800/60 text-xs">
+                            <tbody className="divide-y divide-white/[0.06] text-xs">
                               {stageTasks.map((task) => renderTaskTableRow(task))}
                             </tbody>
                           </table>
@@ -2752,7 +2737,7 @@ export function TaskNotepad({
       )}
 
       {/* FOOTER / STATUS BAR */}
-      <div className="pt-4 border-t border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-slate-400">
+      <div className="pt-4 border-t border-white/[0.07] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-slate-400">
         <div className="flex items-center flex-wrap gap-2.5">
           <span>
             <strong>{totalCount}</strong> total tasks
@@ -2807,13 +2792,13 @@ export function TaskNotepad({
       {isFormOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-150">
           <div
-            className="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+            className="bg-[#0d1017] border border-slate-700/80 rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/60">
+            <div className="px-6 py-4 border-b border-white/[0.07] flex items-center justify-between bg-[#07090e]/60">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400">
+                <div className="w-8 h-8 rounded-lg bg-white/[0.05] border border-white/[0.08] flex items-center justify-center text-slate-400">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                   </svg>
@@ -2876,7 +2861,7 @@ export function TaskNotepad({
                   value={formHeading}
                   onChange={(e) => setFormHeading(e.target.value)}
                   placeholder="e.g. Implement Supabase database pooling"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition"
+                  className="w-full bg-[#07090e] border border-white/[0.07] rounded-xl px-3.5 py-2.5 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-white/[0.22] focus:ring-1 focus:ring-white/[0.1] transition"
                   required
                 />
               </div>
@@ -2888,7 +2873,7 @@ export function TaskNotepad({
                     {/* <span className="text-sm">🖼️</span> */}
                     <span>Attached Screenshot</span>
                     {formAttachments.length > 0 && (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-950/80 text-blue-300 font-semibold border border-blue-500/30">
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/[0.05] text-slate-300 font-medium border border-white/[0.08]">
                         {formAttachments.length}
                       </span>
                     )}
@@ -2899,7 +2884,7 @@ export function TaskNotepad({
                       onClick={() => setShowImageUploader((prev) => !prev)}
                       className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition border cursor-pointer ${
                         showImageUploader
-                          ? "bg-blue-950/80 border-blue-500/50 text-blue-200"
+                          ? "bg-white/[0.06] border-white/[0.2] text-white"
                           : "bg-slate-800 hover:bg-slate-700/80 border-slate-700 text-slate-300 hover:text-white"
                       }`}
                     >
@@ -2950,23 +2935,23 @@ export function TaskNotepad({
                     onClick={() => formAttachmentFileInputRef.current?.click()}
                     className={`p-3.5 rounded-xl border border-dashed transition text-center cursor-pointer select-none animate-in fade-in duration-150 ${
                       isFormDraggingOver
-                        ? "border-blue-400 bg-blue-950/40 text-blue-200"
-                        : "border-slate-800 hover:border-slate-700 bg-slate-950 text-slate-400 hover:text-slate-300"
+                        ? "border-white/[0.3] bg-white/[0.04] text-white"
+                        : "border-white/[0.07] hover:border-slate-700 bg-[#07090e] text-slate-400 hover:text-slate-300"
                     }`}
                   >
                     <div className="flex flex-col items-center justify-center gap-1">
                       {isUploadingFormAttachment ? (
-                        <div className="flex items-center gap-2 text-blue-300 py-1">
-                          <span className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                        <div className="flex items-center gap-2 text-slate-300 py-1">
+                          <span className="w-4 h-4 border-2 border-white/[0.3] border-t-transparent rounded-full animate-spin" />
                           <span className="text-xs font-medium">Uploading to ImageKit CDN...</span>
                         </div>
                       ) : (
                         <>
                           <div className="flex items-center gap-1.5 text-xs font-medium text-slate-300">
-                            <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                             </svg>
-                            <span><span className="text-blue-400 hover:underline">Click to upload image</span> or drag here</span>
+                            <span><span className="text-slate-400 hover:underline">Click to upload image</span> or drag here</span>
                           </div>
                           <span className="text-[10px] text-slate-500">
                             PNG, JPG, WebP, GIF, SVG (up to 15MB) • Or press <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 font-mono text-[9px]">Ctrl+V</kbd> to paste screenshot
@@ -2997,11 +2982,11 @@ export function TaskNotepad({
                     {formAttachments.map((att) => (
                       <div
                         key={att.fileId}
-                        className="group/formimg relative rounded-xl overflow-hidden bg-slate-900 border border-slate-800 hover:border-blue-500/50 transition flex flex-col"
+                        className="group/formimg relative rounded-xl overflow-hidden bg-[#0d1017] border border-white/[0.07] hover:border-white/[0.2] transition flex flex-col"
                       >
                         <div
                           onClick={() => setLightboxAttachment(att)}
-                          className="relative aspect-video w-full bg-slate-950 overflow-hidden cursor-zoom-in"
+                          className="relative aspect-video w-full bg-[#07090e] overflow-hidden cursor-zoom-in"
                         >
                           <img
                             src={att.thumbnailUrl || att.url}
@@ -3009,7 +2994,7 @@ export function TaskNotepad({
                             className="w-full h-full object-cover transition-transform group-hover/formimg:scale-105"
                           />
                         </div>
-                        <div className="p-2 bg-slate-950 flex items-center justify-between gap-1 text-[11px]">
+                        <div className="p-2 bg-[#07090e] flex items-center justify-between gap-1 text-[11px]">
                           <span className="truncate text-slate-300 flex-1" title={att.name}>
                             {att.name}
                           </span>
@@ -3046,7 +3031,7 @@ export function TaskNotepad({
                       onClick={() => setShowVoiceRecorder((prev) => !prev)}
                       className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition border cursor-pointer ${
                         showVoiceRecorder
-                          ? "bg-blue-950/80 border-blue-500/50 text-blue-200"
+                          ? "bg-white/[0.06] border-white/[0.2] text-white"
                           : "bg-slate-800 hover:bg-slate-700/80 border-slate-700 text-slate-300 hover:text-white"
                       }`}
                     >
@@ -3081,10 +3066,10 @@ export function TaskNotepad({
 
                 {/* If a voice note already exists in the form */}
                 {formVoiceNote && (
-                  <div className="p-3 rounded-xl bg-gradient-to-r from-slate-900 via-blue-950/25 to-slate-900 border border-blue-500/30 shadow-md space-y-2.5">
+                  <div className="p-3 rounded-xl bg-[#07090e] border border-white/[0.08] shadow-md space-y-2.5">
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 min-w-0">
-                        <span className="w-8 h-8 rounded-lg bg-blue-500/20 text-blue-300 flex items-center justify-center shrink-0 border border-blue-500/30">
+                        <span className="w-8 h-8 rounded-lg bg-white/[0.08] text-slate-300 flex items-center justify-center shrink-0 border border-white/[0.08]">
                           🎙️
                         </span>
                         <div className="min-w-0">
@@ -3118,7 +3103,7 @@ export function TaskNotepad({
                     </div>
 
                     {/* Audio Player */}
-                    <div className="rounded-lg overflow-hidden bg-slate-950 p-1.5 border border-slate-800">
+                    <div className="rounded-lg overflow-hidden bg-[#07090e] p-1.5 border border-white/[0.07]">
                       <audio controls src={formVoiceNote.url} className="w-full h-8" preload="metadata" />
                     </div>
                   </div>
@@ -3126,7 +3111,7 @@ export function TaskNotepad({
 
                 {/* Live Recording In-Progress Banner with Real-Time Audio Level Visualizer */}
                 {isRecordingVoice && (
-                  <div className="p-3.5 rounded-xl bg-gradient-to-r from-slate-900 via-blue-950/40 to-slate-900 border border-rose-500/50 shadow-lg flex items-center justify-between gap-3 flex-wrap animate-in fade-in duration-150">
+                  <div className="p-3.5 rounded-xl bg-[#07090e] border border-rose-500/50 shadow-lg flex items-center justify-between gap-3 flex-wrap animate-in fade-in duration-150">
                     <div className="flex items-center gap-3">
                       <div className="relative flex items-center justify-center">
                         <span className="w-3 h-3 rounded-full bg-rose-500 animate-ping absolute" />
@@ -3170,7 +3155,7 @@ export function TaskNotepad({
                     </div>
 
                     {/* Live Equalizer Visualizer Bars */}
-                    <div className="flex items-center gap-2 bg-slate-950/90 px-3 py-1.5 rounded-lg border border-slate-800">
+                    <div className="flex items-center gap-2 bg-[#07090e]/90 px-3 py-1.5 rounded-lg border border-white/[0.07]">
                       <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Mic Level</span>
                       <div className="flex items-end gap-1 h-5 w-20">
                         {[0.08, 0.22, 0.40, 0.60, 0.80].map((threshold, idx) => {
@@ -3221,9 +3206,9 @@ export function TaskNotepad({
 
                 {/* Default Voice Note Options Window of Explanation (hidden until "+ Add Voice" is clicked) */}
                 {showVoiceRecorder && !isRecordingVoice && (
-                  <div className="p-3 rounded-xl border border-dashed border-slate-800 bg-slate-950 flex flex-col sm:flex-row items-center justify-between gap-2.5 animate-in fade-in duration-150">
+                  <div className="p-3 rounded-xl border border-dashed border-white/[0.07] bg-[#07090e] flex flex-col sm:flex-row items-center justify-between gap-2.5 animate-in fade-in duration-150">
                     <div className="flex items-center gap-2.5 text-left w-full sm:w-auto">
-                      <div className="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 shrink-0">
+                      <div className="w-8 h-8 rounded-lg bg-white/[0.05] border border-white/[0.1] flex items-center justify-center text-slate-400 shrink-0">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
                         </svg>
@@ -3241,7 +3226,7 @@ export function TaskNotepad({
                     <div className="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap">
                       {/* Microphone Device Picker */}
                       {audioDevices.length > 0 && (
-                        <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-900 border border-slate-800 text-xs">
+                        <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-[#0d1017] border border-white/[0.07] text-xs">
                           <span className="text-[10px] text-slate-400 font-medium">Mic:</span>
                           <select
                             value={selectedAudioDeviceId}
@@ -3250,7 +3235,7 @@ export function TaskNotepad({
                             title="Select your microphone input"
                           >
                             {audioDevices.map((d) => (
-                              <option key={d.deviceId} value={d.deviceId} className="bg-slate-900 text-slate-200">
+                              <option key={d.deviceId} value={d.deviceId} className="bg-[#0d1017] text-slate-200">
                                 {d.label || "Microphone"} {/droidcam/i.test(d.label) ? "(Virtual - Silent if idle)" : ""}
                               </option>
                             ))}
@@ -3259,8 +3244,8 @@ export function TaskNotepad({
                       )}
 
                       {isUploadingVoice ? (
-                        <div className="flex items-center gap-2 px-3 py-1.5 text-xs text-blue-300">
-                          <span className="w-3.5 h-3.5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                        <div className="flex items-center gap-2 px-3 py-1.5 text-xs text-slate-300">
+                          <span className="w-3.5 h-3.5 border-2 border-white/[0.3] border-t-transparent rounded-full animate-spin" />
                           <span>Uploading audio...</span>
                         </div>
                       ) : (
@@ -3268,7 +3253,7 @@ export function TaskNotepad({
                           <button
                             type="button"
                             onClick={() => startVoiceRecording()}
-                            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-sm transition cursor-pointer"
+                            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-slate-200 !text-slate-950 text-white text-xs font-semibold shadow-sm transition cursor-pointer"
                           >
                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
@@ -3317,7 +3302,7 @@ export function TaskNotepad({
                   value={formDescription}
                   onChange={(e) => setFormDescription(e.target.value)}
                   placeholder="Describe the task details, requirements, or acceptance criteria..."
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition resize-y"
+                  className="w-full bg-[#07090e] border border-white/[0.07] rounded-xl p-3 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-white/[0.22] focus:ring-1 focus:ring-white/[0.1] transition resize-y"
                 />
               </div>
 
@@ -3331,7 +3316,7 @@ export function TaskNotepad({
                     <button
                       type="button"
                       onClick={() => setIsCreatingInlineFolder(true)}
-                      className="text-[11px] text-blue-400 hover:text-blue-300 font-medium cursor-pointer"
+                      className="text-[11px] text-slate-300 hover:text-white font-medium cursor-pointer"
                     >
                       + New Folder
                     </button>
@@ -3346,7 +3331,7 @@ export function TaskNotepad({
                       value={inlineFolderInput}
                       onChange={(e) => setInlineFolderInput(e.target.value)}
                       placeholder="Folder name (e.g. Backend, Frontend)..."
-                      className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-blue-500"
+                      className="flex-1 bg-[#07090e] border border-white/[0.07] rounded-xl px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-white/[0.22]"
                     />
                     <button
                       type="button"
@@ -3360,7 +3345,7 @@ export function TaskNotepad({
                           setInlineFolderInput("");
                         }
                       }}
-                      className="px-3 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition cursor-pointer"
+                      className="px-3 py-1.5 text-xs font-semibold bg-white hover:bg-slate-200 !text-slate-950 text-white rounded-xl transition cursor-pointer"
                     >
                       Add
                     </button>
@@ -3386,17 +3371,17 @@ export function TaskNotepad({
                           setFormFolder(e.target.value);
                         }
                       }}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-200 outline-none focus:border-blue-500 appearance-none transition cursor-pointer"
+                      className="w-full bg-[#07090e] border border-white/[0.07] rounded-xl px-3.5 py-2.5 text-sm text-slate-200 outline-none focus:border-white/[0.22] appearance-none transition cursor-pointer"
                     >
-                      <option value="" className="bg-slate-900 text-slate-400">
-                        📁 General (No Folder)
+                      <option value="" className="bg-[#0d1017] text-slate-400">
+                        General (No Folder)
                       </option>
                       {folders.map((f) => (
-                        <option key={f} value={f} className="bg-slate-900 text-slate-100">
-                          📁 {f}
+                        <option key={f} value={f} className="bg-[#0d1017] text-slate-100">
+                          {f}
                         </option>
                       ))}
-                      <option value="__create_new__" className="bg-slate-900 text-blue-400 font-semibold">
+                      <option value="__create_new__" className="bg-[#0d1017] text-slate-400 font-semibold">
                         + Create New Folder...
                       </option>
                     </select>
@@ -3427,7 +3412,7 @@ export function TaskNotepad({
                         className={`p-2.5 rounded-xl border text-left flex flex-col justify-between transition cursor-pointer min-h-[66px] ${
                           isSelected
                             ? `${c.badgeClass} ${c.ringClass} ring-1 font-semibold shadow-sm`
-                            : "bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700"
+                            : "bg-[#07090e] border-white/[0.07] text-slate-400 hover:border-slate-700"
                         }`}
                       >
                         <div className="flex items-center gap-1.5">
@@ -3455,7 +3440,7 @@ export function TaskNotepad({
                       type="date"
                       value={formStartDate}
                       onChange={(e) => setFormStartDate(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition [color-scheme:dark]"
+                      className="w-full bg-[#07090e] border border-white/[0.07] rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-white/[0.22] focus:ring-1 focus:ring-white/[0.1] transition [color-scheme:dark]"
                     />
                   </div>
 
@@ -3468,7 +3453,7 @@ export function TaskNotepad({
                       type="date"
                       value={formEndDate}
                       onChange={(e) => setFormEndDate(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition [color-scheme:dark]"
+                      className="w-full bg-[#07090e] border border-white/[0.07] rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-white/[0.22] focus:ring-1 focus:ring-white/[0.1] transition [color-scheme:dark]"
                     />
                   </div>
                 </div>
@@ -3483,7 +3468,7 @@ export function TaskNotepad({
 
                 {/* Existing comments in modal */}
                 {formCommentsList.length > 0 && (
-                  <div className="space-y-2 max-h-52 overflow-y-auto p-2 bg-slate-950/80 rounded-xl border border-slate-800">
+                  <div className="space-y-2 max-h-52 overflow-y-auto p-2 bg-[#07090e]/80 rounded-xl border border-white/[0.07]">
                     {formCommentsList.map((c) => {
                       const timeInfo = formatCommentBadge(c.createdAt, c.dateTime);
                       const subComments = c.subComments || [];
@@ -3492,8 +3477,8 @@ export function TaskNotepad({
                           <div
                             className={`group flex items-start justify-between gap-2.5 p-2 rounded-lg border text-xs ${
                               c.completed
-                                ? "bg-slate-900/40 border-slate-800/40"
-                                : "bg-slate-900 border-slate-800"
+                                ? "bg-[#0d1017]/40 border-white/[0.07]/40"
+                                : "bg-[#0d1017] border-white/[0.07]"
                             }`}
                           >
                             {/* Checkbox to mark comment completed */}
@@ -3508,8 +3493,8 @@ export function TaskNotepad({
                               }
                               className={`w-4 h-4 rounded border flex items-center justify-center transition-all cursor-pointer flex-shrink-0 mt-0.5 ${
                                 c.completed
-                                  ? "bg-emerald-600 border-emerald-500 text-white"
-                                  : "border-slate-600 bg-slate-950 hover:border-emerald-500 text-transparent"
+                                  ? "bg-white border-white text-slate-950"
+                                  : "border-slate-600 bg-[#07090e] hover:border-emerald-500 text-transparent"
                               }`}
                               title={c.completed ? "Mark comment as incomplete" : "Mark comment as completed"}
                             >
@@ -3534,8 +3519,8 @@ export function TaskNotepad({
                                 {c.text}
                               </p>
                               <div className="flex items-center gap-1.5 mt-1 text-[10px] text-slate-400">
-                                <span className="inline-flex items-center gap-1 text-blue-300 font-medium">
-                                  <svg className="w-2.5 h-2.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <span className="inline-flex items-center gap-1 text-slate-300 font-medium">
+                                  <svg className="w-2.5 h-2.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                                   </svg>
                                   <span>{timeInfo.full}</span>
@@ -3562,7 +3547,7 @@ export function TaskNotepad({
 
                           {/* Sub-comments in modal */}
                           {subComments.length > 0 && (
-                            <div className="ml-5 pl-2.5 border-l-2 border-blue-500/30 space-y-1">
+                            <div className="ml-5 pl-2.5 border-l-2 border-white/[0.08] space-y-1">
                               {subComments.map((sc) => {
                                 const scTime = formatCommentBadge(sc.createdAt, sc.dateTime);
                                 return (
@@ -3570,8 +3555,8 @@ export function TaskNotepad({
                                     key={sc.id}
                                     className={`group/sc flex items-start justify-between gap-2 p-1.5 rounded border text-[11px] ${
                                       sc.completed
-                                        ? "bg-slate-900/30 border-slate-800/40 text-slate-500"
-                                        : "bg-slate-900/70 border-slate-800/60 text-slate-300"
+                                        ? "bg-[#0d1017]/30 border-white/[0.07]/40 text-slate-500"
+                                        : "bg-[#0d1017]/70 border-white/[0.07]/60 text-slate-300"
                                     }`}
                                   >
                                     <button
@@ -3592,8 +3577,8 @@ export function TaskNotepad({
                                       }
                                       className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-all cursor-pointer flex-shrink-0 mt-0.5 ${
                                         sc.completed
-                                          ? "bg-emerald-600 border-emerald-500 text-white"
-                                          : "border-slate-600 bg-slate-950 hover:border-emerald-500 text-transparent"
+                                          ? "bg-white border-white text-slate-950"
+                                          : "border-slate-600 bg-[#07090e] hover:border-emerald-500 text-transparent"
                                       }`}
                                       title={sc.completed ? "Mark as incomplete" : "Mark as completed"}
                                     >
@@ -3663,7 +3648,7 @@ export function TaskNotepad({
                           ? "Add another comment..."
                           : "Add an initial comment..."
                       }
-                      className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition"
+                      className="flex-1 bg-[#07090e] border border-white/[0.07] rounded-xl px-3.5 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-white/[0.22] focus:ring-1 focus:ring-white/[0.1] transition"
                     />
                     <button
                       type="button"
@@ -3695,7 +3680,7 @@ export function TaskNotepad({
               </div>
 
               {/* Modal Footer Actions */}
-              <div className="pt-3 border-t border-slate-800 flex items-center justify-end gap-2.5">
+              <div className="pt-3 border-t border-white/[0.07] flex items-center justify-end gap-2.5">
                 <button
                   type="button"
                   onClick={closeForm}
@@ -3708,7 +3693,7 @@ export function TaskNotepad({
                 <button
                   type="submit"
                   disabled={formSubmitting || !formHeading.trim()}
-                  className="px-5 py-2 text-xs font-semibold bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-xl transition shadow-sm shadow-blue-600/30 cursor-pointer disabled:cursor-not-allowed flex items-center gap-1.5 active:scale-95"
+                  className="px-5 py-2 text-xs font-semibold bg-white hover:bg-slate-200 !text-slate-950 disabled:opacity-50 text-white rounded-xl transition shadow-sm  cursor-pointer disabled:cursor-not-allowed flex items-center gap-1.5 active:scale-95"
                 >
                   {formSubmitting ? (
                     <>
@@ -3731,12 +3716,12 @@ export function TaskNotepad({
       {isAddFolderModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
           <div
-            className="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-150 p-5 space-y-4"
+            className="bg-[#0d1017] border border-slate-700/80 rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-150 p-5 space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <span>📁</span>
+                
                 <span>Create New Folder</span>
               </h3>
               <button
@@ -3766,7 +3751,7 @@ export function TaskNotepad({
                 value={newFolderInput}
                 onChange={(e) => setNewFolderInput(e.target.value)}
                 placeholder="Folder name (e.g. Backend, Frontend)..."
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-blue-500"
+                className="w-full bg-[#07090e] border border-white/[0.07] rounded-xl px-3.5 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-white/[0.22]"
               />
               <div className="flex items-center justify-end gap-2 pt-1">
                 <button
@@ -3779,7 +3764,7 @@ export function TaskNotepad({
                 <button
                   type="submit"
                   disabled={!newFolderInput.trim()}
-                  className="px-4 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-lg shadow-sm transition cursor-pointer"
+                  className="px-4 py-1.5 text-xs font-semibold bg-white hover:bg-slate-200 !text-slate-950 disabled:opacity-50 text-white rounded-lg shadow-sm transition cursor-pointer"
                 >
                   Create Folder
                 </button>
@@ -3793,7 +3778,7 @@ export function TaskNotepad({
       {folderToRename && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
           <div
-            className="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-150 p-5 space-y-4"
+            className="bg-[#0d1017] border border-slate-700/80 rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-150 p-5 space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
@@ -3827,7 +3812,7 @@ export function TaskNotepad({
                 value={renameFolderInput}
                 onChange={(e) => setRenameFolderInput(e.target.value)}
                 placeholder="New folder name..."
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-blue-500"
+                className="w-full bg-[#07090e] border border-white/[0.07] rounded-xl px-3.5 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-white/[0.22]"
               />
               <div className="flex items-center justify-end gap-2 pt-1">
                 <button
@@ -3840,7 +3825,7 @@ export function TaskNotepad({
                 <button
                   type="submit"
                   disabled={!renameFolderInput.trim()}
-                  className="px-4 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-lg shadow-sm transition cursor-pointer"
+                  className="px-4 py-1.5 text-xs font-semibold bg-white hover:bg-slate-200 !text-slate-950 disabled:opacity-50 text-white rounded-lg shadow-sm transition cursor-pointer"
                 >
                   Save
                 </button>
@@ -3862,13 +3847,13 @@ export function TaskNotepad({
 
           {/* Slide-over Drawer Panel (Wider Dual-Window Modal) */}
           <div
-            className="relative z-50 w-full max-w-6xl xl:max-w-7xl 2xl:max-w-[1440px] bg-slate-900 border-l border-slate-800 shadow-2xl flex flex-col h-full overflow-hidden animate-in slide-in-from-right duration-300"
+            className="relative z-50 w-full max-w-6xl xl:max-w-7xl 2xl:max-w-[1440px] bg-[#0d1017] border-l border-white/[0.07] shadow-2xl flex flex-col h-full overflow-hidden animate-in slide-in-from-right duration-300"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Top Modal Header Bar */}
-            <div className="px-6 py-3.5 border-b border-slate-800 bg-slate-950 flex items-center justify-between gap-3 shrink-0">
+            <div className="px-6 py-3.5 border-b border-white/[0.07] bg-[#07090e] flex items-center justify-between gap-3 shrink-0">
               <div className="flex items-center gap-3 min-w-0">
-                <span className="text-xs font-semibold px-2.5 py-1 rounded-md bg-blue-950/60 text-blue-400 border border-blue-500/30 uppercase tracking-wider shrink-0">
+                <span className="text-xs font-semibold px-2.5 py-1 rounded-md bg-white/[0.05] text-slate-300 border border-white/[0.08] uppercase tracking-wider shrink-0">
                   Task Workspace
                 </span>
                 <span className="text-slate-600 font-light hidden sm:inline">|</span>
@@ -3900,9 +3885,9 @@ export function TaskNotepad({
               {/* ========================================================================= */}
               {/* LEFT WINDOW: Task Details & Comments Discussion                           */}
               {/* ========================================================================= */}
-              <div className="w-full lg:w-[var(--left-panel-width)] lg:shrink-0 flex flex-col h-full overflow-hidden border-b lg:border-b-0 border-slate-800 bg-slate-900">
+              <div className="w-full lg:w-[var(--left-panel-width)] lg:shrink-0 flex flex-col h-full overflow-hidden border-b lg:border-b-0 border-white/[0.07] bg-[#0d1017]">
                 {/* Left Window Header */}
-                <div className="px-5 py-3 border-b border-slate-800 bg-slate-950/70 flex items-center justify-between gap-3 shrink-0">
+                <div className="px-5 py-3 border-b border-white/[0.07] bg-[#07090e]/70 flex items-center justify-between gap-3 shrink-0">
                   <div className="flex items-center gap-2.5 min-w-0">
                     <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
                       Task Details
@@ -3923,7 +3908,7 @@ export function TaskNotepad({
                           const slug = stg.slug || stg.id;
                           const c = getStageConfig(slug);
                           return (
-                            <option key={slug} value={slug} className="bg-slate-900 text-slate-100">
+                            <option key={slug} value={slug} className="bg-[#0d1017] text-slate-100">
                               {c.label}
                             </option>
                           );
@@ -3989,10 +3974,10 @@ export function TaskNotepad({
                       <div className="flex items-center flex-wrap gap-2">
                         {/* Timeline Badge */}
                         <span
-                          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900/90 border border-slate-800 text-xs sm:text-sm text-slate-300 shadow-sm"
+                          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#0d1017]/90 border border-white/[0.07] text-xs sm:text-sm text-slate-300 shadow-sm"
                           title="Task Timeline"
                         >
-                          <svg className="w-4 h-4 text-blue-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-4 h-4 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2z" />
                           </svg>
                           <span className="text-slate-400 font-medium">Timeline:</span>
@@ -4005,7 +3990,7 @@ export function TaskNotepad({
 
                         {/* Created Date Badge */}
                         <span
-                          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900/90 border border-slate-800 text-xs sm:text-sm text-slate-300 shadow-sm"
+                          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#0d1017]/90 border border-white/[0.07] text-xs sm:text-sm text-slate-300 shadow-sm"
                           title="Created Date"
                         >
                           <svg className="w-4 h-4 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -4020,7 +4005,7 @@ export function TaskNotepad({
                     </div>
 
                     {/* Task Title Content (Read-only container like Description) */}
-                    <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800/90 text-sm text-slate-200 font-semibold leading-relaxed whitespace-pre-wrap break-words">
+                    <div className="p-4 rounded-xl bg-[#07090e]/80 border border-white/[0.07]/90 text-sm text-slate-200 font-semibold leading-relaxed whitespace-pre-wrap break-words">
                       {activeDetailTask.heading || activeDetailTask.title ? (
                         activeDetailTask.heading || activeDetailTask.title
                       ) : (
@@ -4034,7 +4019,7 @@ export function TaskNotepad({
                     <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
                       Description
                     </span>
-                    <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800/90 text-sm text-slate-200 leading-relaxed whitespace-pre-wrap break-words min-h-[60px]">
+                    <div className="p-4 rounded-xl bg-[#07090e]/80 border border-white/[0.07]/90 text-sm text-slate-200 leading-relaxed whitespace-pre-wrap break-words min-h-[60px]">
                       {activeDetailTask.description ? (
                         activeDetailTask.description
                       ) : (
@@ -4045,10 +4030,10 @@ export function TaskNotepad({
 
                   {/* Task Voice Note / Explanation (View & Listen in Task Workspace) */}
                   {activeDetailTask.voiceNote && (
-                    <div className="p-3.5 rounded-xl bg-gradient-to-r from-slate-900 via-blue-950/25 to-slate-900 border border-blue-500/30 shadow-md space-y-2.5">
+                    <div className="p-3.5 rounded-xl bg-[#07090e] border border-white/[0.08] shadow-md space-y-2.5">
                       <div className="flex items-center justify-between gap-2 flex-wrap">
                         <div className="flex items-center gap-2 min-w-0">
-                          <span className="w-8 h-8 rounded-lg bg-blue-500/20 text-blue-300 flex items-center justify-center shrink-0 border border-blue-500/40 shadow-inner">
+                          <span className="w-8 h-8 rounded-lg bg-white/[0.08] text-slate-300 flex items-center justify-center shrink-0 border border-white/[0.16] shadow-inner">
                             🎙️
                           </span>
                           <div className="min-w-0">
@@ -4056,7 +4041,7 @@ export function TaskNotepad({
                               <h3 className="text-xs font-bold text-white tracking-wide">
                                 Voice Explanation
                               </h3>
-                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-950/80 text-blue-300 font-semibold border border-blue-500/30">
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/[0.05] text-slate-300 font-medium border border-white/[0.08]">
                                 Audio Note
                               </span>
                             </div>
@@ -4090,7 +4075,7 @@ export function TaskNotepad({
                       </div>
 
                       {/* Native HTML5 Audio Player */}
-                      <div className="rounded-lg overflow-hidden bg-slate-950 p-2 border border-slate-800 shadow-inner">
+                      <div className="rounded-lg overflow-hidden bg-[#07090e] p-2 border border-white/[0.07] shadow-inner">
                         <audio
                           controls
                           src={activeDetailTask.voiceNote.url}
@@ -4103,13 +4088,13 @@ export function TaskNotepad({
 
                   {/* Task Attachments & Images Section (View Only in Task Workspace) */}
                   {activeDetailTask.attachments && activeDetailTask.attachments.length > 0 && (
-                    <div className="space-y-3 pt-3 border-t border-slate-800/80">
+                    <div className="space-y-3 pt-3 border-t border-white/[0.07]/80">
                       <div className="flex items-center justify-between flex-wrap gap-2">
                         <div className="flex items-center gap-2">
                           <h3 className="text-sm font-bold text-white tracking-wide">
                             Attached Screenshot
                           </h3>
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-blue-950/80 text-blue-300 font-semibold border border-blue-500/30">
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-white/[0.05] text-slate-300 font-medium border border-white/[0.08]">
                             {activeDetailTask.attachments.length}
                           </span>
                         </div>
@@ -4120,12 +4105,12 @@ export function TaskNotepad({
                         {activeDetailTask.attachments.map((att) => (
                           <div
                             key={att.fileId}
-                            className="group/img relative rounded-xl overflow-hidden bg-slate-950 border border-slate-800 hover:border-blue-500/50 transition-all shadow-sm flex flex-col"
+                            className="group/img relative rounded-xl overflow-hidden bg-[#07090e] border border-white/[0.07] hover:border-white/[0.2] transition-all shadow-sm flex flex-col"
                           >
                             {/* Thumbnail preview */}
                             <div
                               onClick={() => setLightboxAttachment(att)}
-                              className="relative aspect-video w-full bg-slate-900 overflow-hidden cursor-zoom-in flex items-center justify-center"
+                              className="relative aspect-video w-full bg-[#0d1017] overflow-hidden cursor-zoom-in flex items-center justify-center"
                             >
                               <img
                                 src={att.thumbnailUrl || att.url}
@@ -4144,12 +4129,12 @@ export function TaskNotepad({
                             </div>
 
                             {/* Card Footer: Name, Size & Open Link */}
-                            <div className="p-2.5 bg-slate-950 flex items-center justify-between gap-1.5 text-xs">
+                            <div className="p-2.5 bg-[#07090e] flex items-center justify-between gap-1.5 text-xs">
                               <div className="min-w-0 flex-1">
                                 <p
                                   title={att.name}
                                   onClick={() => setLightboxAttachment(att)}
-                                  className="text-[11px] font-semibold text-slate-200 truncate hover:text-blue-300 cursor-pointer"
+                                  className="text-[11px] font-semibold text-slate-200 truncate hover:text-slate-300 cursor-pointer"
                                 >
                                   {att.name}
                                 </p>
@@ -4184,13 +4169,13 @@ export function TaskNotepad({
                     const hasNoComments = taskComments.length === 0;
 
                     return (
-                      <div className="space-y-3 pt-2 border-t border-slate-800/80">
+                      <div className="space-y-3 pt-2 border-t border-white/[0.07]/80">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <h3 className="text-sm font-bold text-white tracking-wide">
                               Comments & Discussion
                             </h3>
-                            <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-blue-400 font-semibold border border-slate-700">
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 font-semibold border border-slate-700">
                               {taskComments.length}
                             </span>
                           </div>
@@ -4206,7 +4191,7 @@ export function TaskNotepad({
                               <button
                                 type="button"
                                 onClick={() => setIsDrawerCommentFormOpen(true)}
-                                className="px-3 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition shadow-sm cursor-pointer flex items-center gap-1.5"
+                                className="px-3 py-1.5 text-xs font-semibold bg-white hover:bg-slate-200 !text-slate-950 text-white rounded-lg transition shadow-sm cursor-pointer flex items-center gap-1.5"
                               >
                                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
@@ -4229,7 +4214,7 @@ export function TaskNotepad({
                               setIsAddingDrawerComment(false);
                               setIsDrawerCommentFormOpen(false);
                             }}
-                            className="space-y-2 bg-slate-950/70 p-3.5 rounded-xl border border-slate-800"
+                            className="space-y-2 bg-[#07090e]/70 p-3.5 rounded-xl border border-white/[0.07]"
                           >
                             <textarea
                               value={drawerNewComment}
@@ -4237,7 +4222,7 @@ export function TaskNotepad({
                               placeholder="Write a comment or update for your team..."
                               rows={2}
                               autoFocus={hasNoComments && isDrawerCommentFormOpen}
-                              className="w-full bg-slate-900 border border-slate-700/80 rounded-lg p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition resize-none"
+                              className="w-full bg-[#0d1017] border border-slate-700/80 rounded-lg p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-white/[0.22] transition resize-none"
                             />
                             <div className="flex items-center justify-between">
                               <span className="text-[10px] text-slate-500">
@@ -4259,7 +4244,7 @@ export function TaskNotepad({
                                 <button
                                   type="submit"
                                   disabled={!drawerNewComment.trim() || isAddingDrawerComment}
-                                  className="px-3.5 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded-lg transition shadow-sm cursor-pointer disabled:cursor-not-allowed flex items-center gap-1.5"
+                                  className="px-3.5 py-1.5 text-xs font-semibold bg-white hover:bg-slate-200 !text-slate-950 disabled:opacity-40 text-white rounded-lg transition shadow-sm cursor-pointer disabled:cursor-not-allowed flex items-center gap-1.5"
                                 >
                                   {isAddingDrawerComment ? (
                                     <>
@@ -4281,7 +4266,7 @@ export function TaskNotepad({
                         )}
 
                         {isReadOnly && (
-                          <div className="p-3 rounded-lg bg-slate-950/40 border border-slate-800 text-xs text-slate-400 italic">
+                          <div className="p-3 rounded-lg bg-[#07090e]/40 border border-white/[0.07] text-xs text-slate-400 italic">
                             You have read-only access to this project. You can read comments, but adding comments is restricted.
                           </div>
                         )}
@@ -4300,8 +4285,8 @@ export function TaskNotepad({
                               <div
                                 className={`group/comment flex items-start justify-between gap-3 p-3 rounded-xl border text-xs transition ${
                                   comment.completed
-                                    ? "bg-slate-950/40 border-slate-800/50"
-                                    : "bg-slate-950/90 border-slate-800 hover:border-slate-700"
+                                    ? "bg-[#07090e]/40 border-white/[0.07]/50"
+                                    : "bg-[#07090e]/90 border-white/[0.07] hover:border-slate-700"
                                 }`}
                               >
                                 {/* Checkbox to toggle comment completion */}
@@ -4313,8 +4298,8 @@ export function TaskNotepad({
                                     isReadOnly ? "cursor-not-allowed opacity-60" : "cursor-pointer"
                                   } ${
                                     comment.completed
-                                      ? "bg-emerald-600 border-emerald-500 text-white shadow-sm"
-                                      : "border-slate-600 bg-slate-900 hover:border-emerald-500 text-transparent"
+                                      ? "bg-white border-white text-slate-950 shadow-sm"
+                                      : "border-slate-600 bg-[#0d1017] hover:border-emerald-500 text-transparent"
                                   }`}
                                   title={
                                     isReadOnly
@@ -4354,8 +4339,8 @@ export function TaskNotepad({
                                   </p>
 
                                   <div className="flex items-center gap-2 mt-2 flex-wrap">
-                                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-slate-900 border border-slate-800 text-[11px] text-blue-300 font-medium">
-                                      <svg className="w-3 h-3 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-[#0d1017] border border-white/[0.07] text-[11px] text-slate-300 font-medium">
+                                      <svg className="w-3 h-3 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                                       </svg>
                                       <span>{timeInfo.full}</span>
@@ -4380,8 +4365,8 @@ export function TaskNotepad({
                                         onClick={() => setReplyingCommentId(isReplying ? null : comment.id)}
                                         className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium transition cursor-pointer ${
                                           isReplying
-                                            ? "bg-blue-600/20 text-blue-300 border border-blue-500/40"
-                                            : "text-slate-400 hover:text-blue-300 hover:bg-slate-900 border border-transparent"
+                                            ? "bg-white/[0.08] text-slate-300 border border-white/[0.16]"
+                                            : "text-slate-400 hover:text-slate-300 hover:bg-[#0d1017] border border-transparent"
                                         }`}
                                       >
                                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -4410,7 +4395,7 @@ export function TaskNotepad({
 
                               {/* Nested Sub-Comments Thread */}
                               {(subComments.length > 0 || isReplying) && (
-                                <div className="ml-6 pl-3 border-l-2 border-blue-500/30 space-y-2 pt-1 pb-1">
+                                <div className="ml-6 pl-3 border-l-2 border-white/[0.08] space-y-2 pt-1 pb-1">
                                   {subComments.map((subComment) => {
                                     const subTime = formatCommentBadge(subComment.createdAt, subComment.dateTime);
                                     return (
@@ -4418,8 +4403,8 @@ export function TaskNotepad({
                                         key={subComment.id}
                                         className={`group/subcomment flex items-start justify-between gap-2.5 p-2.5 rounded-lg border text-xs transition ${
                                           subComment.completed
-                                            ? "bg-slate-950/30 border-slate-800/40"
-                                            : "bg-slate-950/70 border-slate-800 hover:border-slate-700"
+                                            ? "bg-[#07090e]/30 border-white/[0.07]/40"
+                                            : "bg-[#07090e]/70 border-white/[0.07] hover:border-slate-700"
                                         }`}
                                       >
                                         <button
@@ -4430,8 +4415,8 @@ export function TaskNotepad({
                                             isReadOnly ? "cursor-not-allowed opacity-60" : "cursor-pointer"
                                           } ${
                                             subComment.completed
-                                              ? "bg-emerald-600 border-emerald-500 text-white shadow-sm"
-                                              : "border-slate-600 bg-slate-900 hover:border-emerald-500 text-transparent"
+                                              ? "bg-white border-white text-slate-950 shadow-sm"
+                                              : "border-slate-600 bg-[#0d1017] hover:border-emerald-500 text-transparent"
                                           }`}
                                         >
                                           <svg
@@ -4460,7 +4445,7 @@ export function TaskNotepad({
                                             {subComment.text}
                                           </p>
                                           <div className="flex items-center gap-2 mt-1">
-                                            <span className="text-[10px] text-blue-300">
+                                            <span className="text-[10px] text-slate-300">
                                               {subTime.full}
                                             </span>
                                           </div>
@@ -4504,13 +4489,13 @@ export function TaskNotepad({
                                         }}
                                         placeholder="Write a reply..."
                                         autoFocus
-                                        className="flex-1 bg-slate-950 border border-slate-800 text-xs text-white rounded-lg px-2.5 py-1.5 placeholder:text-slate-500 focus:outline-none focus:border-blue-500 transition"
+                                        className="flex-1 bg-[#07090e] border border-white/[0.07] text-xs text-white rounded-lg px-2.5 py-1.5 placeholder:text-slate-500 focus:outline-none focus:border-white/[0.22] transition"
                                       />
                                       <button
                                         type="button"
                                         disabled={!(inlineSubComments[comment.id] || "").trim() || savingSubCommentCommentId === comment.id}
                                         onClick={() => handleAddSubComment(activeDetailTask.id, comment.id, inlineSubComments[comment.id] || "")}
-                                        className="px-3 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition cursor-pointer"
+                                        className="px-3 py-1.5 text-xs font-semibold bg-white hover:bg-slate-200 !text-slate-950 text-white rounded-lg transition cursor-pointer"
                                       >
                                         Reply
                                       </button>
@@ -4536,7 +4521,7 @@ export function TaskNotepad({
                 </div>
 
                 {/* Left Window Footer */}
-                <div className="px-5 py-2.5 border-t border-slate-800 bg-slate-950/60 flex items-center justify-between text-xs text-slate-500 shrink-0">
+                <div className="px-5 py-2.5 border-t border-white/[0.07] bg-[#07090e]/60 flex items-center justify-between text-xs text-slate-500 shrink-0">
                   <span>Task ID: {activeDetailTask.id.slice(0, 10)}...</span>
                   <span className="text-[11px] text-slate-400">Task Details & Notes</span>
                 </div>
@@ -4554,8 +4539,8 @@ export function TaskNotepad({
                     // ignore
                   }
                 }}
-                className={`hidden lg:flex w-2.5 hover:w-2.5 relative z-30 cursor-col-resize items-center justify-center bg-slate-950 hover:bg-blue-600/70 border-x border-slate-800 transition-colors shrink-0 group select-none ${
-                  isDraggingSplitter ? "bg-blue-600 ring-2 ring-blue-500/40" : ""
+                className={`hidden lg:flex w-2.5 hover:w-2.5 relative z-30 cursor-col-resize items-center justify-center bg-[#07090e] hover:bg-white/25 border-x border-white/[0.07] transition-colors shrink-0 group select-none ${
+                  isDraggingSplitter ? "bg-white/30 ring-2 ring-white/[0.15]" : ""
                 }`}
                 title="Click and drag to resize windows • Double-click to reset (50/50)"
               >
@@ -4570,11 +4555,11 @@ export function TaskNotepad({
               {/* ========================================================================= */}
               {/* RIGHT WINDOW: Project Chats (Task-Specific Live Sync)                     */}
               {/* ========================================================================= */}
-              <div className="flex-1 w-full lg:w-auto flex flex-col h-full overflow-hidden bg-slate-950/80 min-w-0">
+              <div className="flex-1 w-full lg:w-auto flex flex-col h-full overflow-hidden bg-[#07090e]/80 min-w-0">
                 {/* Project Chats Header */}
-                <div className="px-5 py-3 border-b border-slate-800 bg-slate-950/90 flex items-center justify-between gap-3 shrink-0">
+                <div className="px-5 py-3 border-b border-white/[0.07] bg-[#07090e]/90 flex items-center justify-between gap-3 shrink-0">
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="w-8 h-8 rounded-lg bg-blue-600/20 text-blue-400 border border-blue-500/30 flex items-center justify-center shrink-0">
+                    <div className="w-8 h-8 rounded-lg bg-white/[0.05] text-slate-300 border border-white/[0.08] flex items-center justify-center shrink-0">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                       </svg>
@@ -4596,7 +4581,7 @@ export function TaskNotepad({
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-[11px] px-2.5 py-1 rounded-md bg-slate-900 border border-slate-800 text-slate-300">
+                    <span className="text-[11px] px-2.5 py-1 rounded-md bg-[#0d1017] border border-white/[0.07] text-slate-300">
                       {taskMessages.length} {taskMessages.length === 1 ? "message" : "messages"}
                     </span>
                   </div>
@@ -4605,16 +4590,16 @@ export function TaskNotepad({
                 {/* Project Chats Messages Body */}
                 <div
                   ref={chatMessagesEndRef}
-                  className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 bg-slate-950/40"
+                  className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 bg-[#07090e]/40"
                 >
                   {isLoadingChat && taskMessages.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center text-slate-500 text-xs gap-2 py-12">
-                      <span className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                      <span className="w-5 h-5 border-2 border-white/[0.25] border-t-transparent rounded-full animate-spin" />
                       <span>Loading task chat...</span>
                     </div>
                   ) : taskMessages.length === 0 ? (
-                    <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-500 border border-dashed border-slate-800 rounded-2xl bg-slate-950/30 my-auto">
-                      <div className="w-12 h-12 rounded-2xl bg-blue-500/10 text-blue-400 flex items-center justify-center mb-3 border border-blue-500/20 text-xl">
+                    <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-500 border border-dashed border-white/[0.07] rounded-2xl bg-[#07090e]/30 my-auto">
+                      <div className="w-12 h-12 rounded-2xl bg-white/[0.05] text-slate-400 flex items-center justify-center mb-3 border border-white/[0.1] text-xl">
                         💬
                       </div>
                       <p className="text-sm font-semibold text-slate-300 mb-1">No chat messages yet</p>
@@ -4644,7 +4629,7 @@ export function TaskNotepad({
                           <div
                             className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-xs leading-relaxed whitespace-pre-wrap break-words shadow-sm ${
                               isCurrentUser
-                                ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-br-xs"
+                                ? "bg-white/[0.12] text-white border border-white/[0.12] rounded-br-xs"
                                 : "bg-slate-800/90 border border-slate-700/80 text-slate-100 rounded-bl-xs"
                             }`}
                           >
@@ -4657,7 +4642,7 @@ export function TaskNotepad({
                 </div>
 
                 {/* Project Chats Input Footer */}
-                <div className="p-3.5 border-t border-slate-800 bg-slate-950/90 shrink-0">
+                <div className="p-3.5 border-t border-white/[0.07] bg-[#07090e]/90 shrink-0">
                   <form
                     onSubmit={handleSendChatMessage}
                     className="flex items-center gap-2"
@@ -4667,12 +4652,12 @@ export function TaskNotepad({
                       value={chatInput}
                       onChange={(e) => setChatInput(e.target.value)}
                       placeholder={`Message team about this task...`}
-                      className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition"
+                      className="flex-1 bg-[#0d1017] border border-white/[0.07] rounded-xl px-3.5 py-2.5 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-white/[0.22] focus:ring-1 focus:ring-white/[0.1] transition"
                     />
                     <button
                       type="submit"
                       disabled={!chatInput.trim() || isSendingChat}
-                      className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-semibold rounded-xl transition flex items-center gap-1.5 shadow-sm shrink-0 cursor-pointer"
+                      className="px-4 py-2.5 bg-white hover:bg-slate-200 !text-slate-950 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-semibold rounded-xl transition flex items-center gap-1.5 shadow-sm shrink-0 cursor-pointer"
                     >
                       {isSendingChat ? (
                         <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -4689,7 +4674,7 @@ export function TaskNotepad({
                 </div>
 
                 {/* Right Window Sub-Footer */}
-                <div className="px-5 py-2 border-t border-slate-900 bg-slate-950 flex items-center justify-between text-[11px] text-slate-500 shrink-0">
+                <div className="px-5 py-2 border-t border-slate-900 bg-[#07090e] flex items-center justify-between text-[11px] text-slate-500 shrink-0">
                   <span className="flex items-center gap-1">
                     🔒 Project Members Only
                   </span>
@@ -4714,11 +4699,11 @@ export function TaskNotepad({
           onClick={() => setLightboxAttachment(null)}
         >
           <div
-            className="relative max-w-5xl max-h-[90vh] w-full bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col"
+            className="relative max-w-5xl max-h-[90vh] w-full bg-[#07090e] border border-white/[0.07] rounded-2xl shadow-2xl overflow-hidden flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Lightbox Header */}
-            <div className="px-5 py-3 border-b border-slate-800 bg-slate-900/80 flex items-center justify-between gap-3">
+            <div className="px-5 py-3 border-b border-white/[0.07] bg-[#0d1017]/80 flex items-center justify-between gap-3">
               <div className="flex items-center gap-2.5 min-w-0">
                 <span className="text-sm font-semibold text-white truncate max-w-md">
                   {lightboxAttachment.name}

@@ -1,17 +1,14 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import Link from "next/link";
 import { LoginForm } from "@/components/LoginForm";
-import { NotificationBell } from "@/components/NotificationBell";
-
+import { WorkspaceHeader } from "@/components/WorkspaceHeader";
 import type { Subscription } from "@/lib/types";
 export type { Subscription };
 
 export default function SubscriptionsPage() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
-  const [isLoaded, setIsLoaded] = useState(false);
   const [filter, setFilter] = useState<"all" | "urgent">("all");
   const [currentTimestamp, setCurrentTimestamp] = useState<number | null>(null);
 
@@ -19,7 +16,6 @@ export default function SubscriptionsPage() {
     setCurrentTimestamp(Date.now());
   }, []);
 
-  // Check auth
   const checkAuth = useCallback(async () => {
     try {
       const res = await fetch("/api/auth");
@@ -45,16 +41,13 @@ export default function SubscriptionsPage() {
     }
   };
 
-  // On-demand calculated time remaining state (no continuous ticker)
   const [calculatedTimes, setCalculatedTimes] = useState<
     Record<string, { text: string; isUrgent: boolean; isExpired: boolean }>
   >({});
 
-  // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  // Form Fields
   const [formName, setFormName] = useState("");
   const [formAmount, setFormAmount] = useState("");
   const [formPurchaseDate, setFormPurchaseDate] = useState("");
@@ -78,7 +71,6 @@ export default function SubscriptionsPage() {
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   };
 
-  // Fetch subscriptions from database API
   const fetchSubscriptions = useCallback(async () => {
     try {
       setIsLoading(true);
@@ -92,11 +84,10 @@ export default function SubscriptionsPage() {
       setSubscriptions(data);
       setSaveStatus("saved");
     } catch (err) {
-      console.error("Error loading subscriptions from Supabase:", err);
+      console.error("Error loading subscriptions:", err);
       setSaveStatus("error");
     } finally {
       setIsLoading(false);
-      setIsLoaded(true);
     }
   }, []);
 
@@ -106,25 +97,25 @@ export default function SubscriptionsPage() {
     }
   }, [isAuthenticated, fetchSubscriptions]);
 
-  // Helper: Calculate remaining time on-demand from current moment
   const calculateRemaining = (dateStr: string) => {
-    if (!dateStr) return { text: "No date set", isUrgent: false, isExpired: false };
+    if (!dateStr)
+      return { text: "No date", isUrgent: false, isExpired: false };
     const parts = dateStr.split("-").map(Number);
-    if (parts.length < 3) return { text: "Invalid date", isUrgent: false, isExpired: false };
+    if (parts.length < 3)
+      return { text: "Invalid", isUrgent: false, isExpired: false };
 
     const now = new Date();
-    // Target midnight of renewal date
     const target = new Date(parts[0], parts[1] - 1, parts[2], 0, 0, 0);
     const diffMs = target.getTime() - now.getTime();
 
     if (diffMs <= 0) {
       const endOfDay = new Date(parts[0], parts[1] - 1, parts[2], 23, 59, 59);
       if (now.getTime() <= endOfDay.getTime()) {
-        return { text: "Renews Today", isUrgent: true, isExpired: true };
+        return { text: "Renews today", isUrgent: true, isExpired: true };
       }
       const daysAgo = Math.floor(Math.abs(diffMs) / (1000 * 60 * 60 * 24));
       return {
-        text: daysAgo > 0 ? `Expired (${daysAgo}d ago)` : "Expired / Due",
+        text: daysAgo > 0 ? `Expired ${daysAgo}d ago` : "Expired",
         isUrgent: true,
         isExpired: true,
       };
@@ -136,28 +127,28 @@ export default function SubscriptionsPage() {
 
     let text = "";
     if (days > 0) text += `${days}d `;
-    text += `${hours}h ${minutes}m left`;
+    text += `${hours}h ${minutes}m`;
 
     const isUrgent = days <= 3;
     return { text, isUrgent, isExpired: false };
   };
 
-  // Button Action: Calculate time remaining for single subscription
   const handleCalculateSingle = (sub: Subscription) => {
     const res = calculateRemaining(sub.renewalDate);
     setCalculatedTimes((prev) => ({ ...prev, [sub.id]: res }));
   };
 
-  // Button Action: Calculate time remaining for ALL subscriptions
   const handleCalculateAll = () => {
-    const nextMap: Record<string, { text: string; isUrgent: boolean; isExpired: boolean }> = {};
+    const nextMap: Record<
+      string,
+      { text: string; isUrgent: boolean; isExpired: boolean }
+    > = {};
     subscriptions.forEach((sub) => {
       nextMap[sub.id] = calculateRemaining(sub.renewalDate);
     });
     setCalculatedTimes(nextMap);
   };
 
-  // Open modal to add
   const handleOpenAdd = () => {
     const today = getTodayDate();
     setEditingId(null);
@@ -168,7 +159,6 @@ export default function SubscriptionsPage() {
     setIsModalOpen(true);
   };
 
-  // When purchase date changes, auto-suggest renewal date 1 month later
   const handlePurchaseDateChange = (newPurchaseDate: string) => {
     setFormPurchaseDate(newPurchaseDate);
     if (newPurchaseDate) {
@@ -177,12 +167,13 @@ export default function SubscriptionsPage() {
         const d = new Date(parts[0], parts[1] - 1, parts[2]);
         d.setMonth(d.getMonth() + 1);
         const pad = (n: number) => String(n).padStart(2, "0");
-        setFormRenewalDate(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`);
+        setFormRenewalDate(
+          `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+        );
       }
     }
   };
 
-  // Open modal to edit
   const handleOpenEdit = (sub: Subscription) => {
     setEditingId(sub.id);
     setFormName(sub.name);
@@ -192,8 +183,6 @@ export default function SubscriptionsPage() {
     setIsModalOpen(true);
   };
 
-  // Save (Add or Update)
-  // Save (Add or Update) via API
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName.trim() || !formRenewalDate) return;
@@ -241,15 +230,17 @@ export default function SubscriptionsPage() {
     }
   };
 
-  // Delete via API
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this subscription from database?")) return;
 
     setSaveStatus("saving");
     try {
-      const res = await fetch(`/api/subscriptions?id=${encodeURIComponent(id)}`, {
-        method: "DELETE",
-      });
+      const res = await fetch(
+        `/api/subscriptions?id=${encodeURIComponent(id)}`,
+        {
+          method: "DELETE",
+        }
+      );
 
       if (!res.ok) throw new Error("Failed to delete subscription");
 
@@ -267,7 +258,6 @@ export default function SubscriptionsPage() {
     }
   };
 
-  // Format date display (e.g. Oct 18, 2026)
   const formatDateDisplay = (dateStr: string) => {
     if (!dateStr) return "-";
     const parts = dateStr.split("-").map(Number);
@@ -280,10 +270,8 @@ export default function SubscriptionsPage() {
     });
   };
 
-  // Statistics
   const stats = useMemo(() => {
     let urgentCount = 0;
-    let urgentTotal = 0;
     let totalMonthly = 0;
     const now = currentTimestamp || 0;
 
@@ -292,20 +280,25 @@ export default function SubscriptionsPage() {
       if (currentTimestamp) {
         const parts = sub.renewalDate.split("-").map(Number);
         if (parts.length === 3) {
-          const target = new Date(parts[0], parts[1] - 1, parts[2], 23, 59, 59).getTime();
+          const target = new Date(
+            parts[0],
+            parts[1] - 1,
+            parts[2],
+            23,
+            59,
+            59
+          ).getTime();
           const diffDays = (target - now) / (1000 * 60 * 60 * 24);
           if (diffDays <= 3) {
             urgentCount++;
-            urgentTotal += sub.amount;
           }
         }
       }
     });
 
-    return { urgentCount, urgentTotal, totalMonthly };
+    return { urgentCount, totalMonthly };
   }, [subscriptions, currentTimestamp]);
 
-  // Filtered List
   const displayedSubs = useMemo(() => {
     const now = currentTimestamp || 0;
     return [...subscriptions]
@@ -314,7 +307,14 @@ export default function SubscriptionsPage() {
           if (!currentTimestamp) return true;
           const parts = s.renewalDate.split("-").map(Number);
           if (parts.length === 3) {
-            const target = new Date(parts[0], parts[1] - 1, parts[2], 23, 59, 59).getTime();
+            const target = new Date(
+              parts[0],
+              parts[1] - 1,
+              parts[2],
+              23,
+              59,
+              59
+            ).getTime();
             return (target - now) / (1000 * 60 * 60 * 24) <= 3;
           }
         }
@@ -323,17 +323,14 @@ export default function SubscriptionsPage() {
       .sort((a, b) => a.renewalDate.localeCompare(b.renewalDate));
   }, [subscriptions, filter, currentTimestamp]);
 
-  // Auth loading state
   if (isAuthenticated === null) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-400">
-        <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-3"></div>
-        <p className="text-sm font-medium">Verifying access...</p>
+      <div className="min-h-screen bg-[#07090e] flex flex-col items-center justify-center text-slate-400">
+        <div className="w-7 h-7 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
-  // Unauthenticated -> Show Login Form
   if (!isAuthenticated) {
     return (
       <LoginForm
@@ -345,234 +342,190 @@ export default function SubscriptionsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col">
-      {/* Top Header */}
-      <header className="bg-slate-900/90 border-b border-slate-800 sticky top-0 z-10 backdrop-blur-md">
-        <div className="max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center font-bold text-white text-sm shadow-md shadow-blue-600/20">
-              S
-            </div>
-            <div>
-              <h1 className="text-base font-bold text-white leading-tight">
-                Subscription Manager
-              </h1>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                <span className="text-[11px] text-slate-400">
-                  Supabase PG: {saveStatus === "saving" ? "Saving..." : saveStatus === "error" ? "Sync Error" : "Synced"}
+    <div className="min-h-screen bg-[#07090e] text-slate-100 font-sans flex flex-col">
+      <WorkspaceHeader
+        title="Subscriptions"
+        icon="⏱️"
+        saveStatus={saveStatus}
+        primaryAction={{
+          label: "Add Subscription",
+          onClick: handleOpenAdd,
+          icon: "+",
+        }}
+        onLogout={handleLogout}
+      />
+
+      <main className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 py-8 space-y-5">
+        {/* Minimal Single-Row Header: Title + Filters on Left, Total + Countdown on Right */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2">
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-xl font-bold text-white tracking-tight">
+              Subscriptions
+            </h1>
+            <div className="flex items-center gap-1 bg-[#10131c] p-1 rounded-xl border border-white/[0.07]">
+              <button
+                onClick={() => setFilter("all")}
+                className={`px-3 py-1 rounded-lg text-xs font-medium transition cursor-pointer ${
+                  filter === "all"
+                    ? "bg-white/[0.1] text-white shadow-xs"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                All ({subscriptions.length})
+              </button>
+              <button
+                onClick={() => setFilter("urgent")}
+                className={`px-3 py-1 rounded-lg text-xs font-medium transition cursor-pointer flex items-center gap-1.5 ${
+                  filter === "urgent"
+                    ? "bg-amber-500/20 text-amber-300"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                <span>Due &le; 3d</span>
+                <span className="font-mono text-[11px] opacity-80">
+                  {stats.urgentCount}
                 </span>
-              </div>
+              </button>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <Link
-              href="/"
-              className="text-xs text-slate-300 hover:text-white px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800/60 hover:bg-slate-800 transition"
-              title="Home Hub"
-            >
-              ← Hub
-            </Link>
-            <Link
-              href="/projects"
-              className="text-xs text-slate-300 hover:text-white px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800/60 hover:bg-slate-800 transition"
-              title="Projects"
-            >
-              Projects
-            </Link>
-            <Link
-              href="/passwords"
-              className="text-xs text-slate-300 hover:text-white px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800/60 hover:bg-slate-800 transition"
-              title="Password Manager"
-            >
-              Passwords
-            </Link>
-            <Link
-              href="/prompts"
-              className="text-xs text-slate-300 hover:text-white px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800/60 hover:bg-slate-800 transition"
-              title="Prompt Saver"
-            >
-              Prompts
-            </Link>
+          <div className="flex items-center justify-between sm:justify-end gap-3">
+            <div className="flex items-baseline gap-1.5 px-3 py-1.5 rounded-xl bg-[#10131c] border border-white/[0.07]">
+              <span className="text-[11px] text-slate-400">Total</span>
+              <span className="text-sm font-bold font-mono text-white tabular-nums">
+                PKR {stats.totalMonthly.toLocaleString()}
+              </span>
+              <span className="text-[10px] text-slate-500 font-mono">/mo</span>
+            </div>
+
             <button
-              onClick={handleOpenAdd}
-              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-medium transition cursor-pointer shadow-sm shadow-blue-600/30"
+              onClick={handleCalculateAll}
+              className="px-3 py-1.5 rounded-xl bg-[#10131c] hover:bg-white/[0.06] text-slate-300 hover:text-white border border-white/[0.07] text-xs font-medium transition flex items-center gap-1.5 cursor-pointer"
+              title="Calculate remaining time for all subscriptions"
             >
-              + Add
-            </button>
-            <NotificationBell />
-            <Link
-              href="/settings"
-              className="p-1.5 rounded-lg border border-slate-700 bg-slate-800/60 hover:bg-slate-800 text-slate-300 hover:text-white transition flex items-center justify-center"
-              title="Settings & Theme Selector"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-            </Link>
-            <button
-              onClick={handleLogout}
-              className="text-xs text-red-400 hover:text-red-300 bg-red-950/30 hover:bg-red-950/60 px-2.5 py-1.5 rounded-lg border border-red-500/30 transition cursor-pointer"
-              title="Log Out"
-            >
-              Logout
+              <span>⏱️</span>
+              <span>Time Left</span>
             </button>
           </div>
         </div>
-      </header>
 
-      {/* Main Container */}
-      <main className="flex-1 max-w-4xl w-full mx-auto p-4 sm:p-6 space-y-4">
-        {/* Simple Summary Bar */}
-        <div className="grid grid-cols-2 gap-3 bg-slate-900 p-4 rounded-xl border border-slate-800 shadow-md text-center">
-          <div>
-            <span className="text-xs text-slate-400 block">Total Subscriptions</span>
-            <span className="text-lg font-bold text-white">{subscriptions.length}</span>
-          </div>
-          <div className="border-l border-slate-800">
-            <span className="text-xs text-slate-400 block">Total Monthly Cost</span>
-            <span className="text-lg font-bold text-white">
-              PKR {stats.totalMonthly.toLocaleString()}
-            </span>
-          </div>
-        </div>
-
-        {/* Toolbar: Filters and Calculate Remaining Time button */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => setFilter("all")}
-              className={`px-3 py-1 rounded-md text-xs font-medium transition cursor-pointer ${
-                filter === "all"
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-800"
-              }`}
-            >
-              All ({subscriptions.length})
-            </button>
-            <button
-              onClick={() => setFilter("urgent")}
-              className={`px-3 py-1 rounded-md text-xs font-medium transition cursor-pointer ${
-                filter === "urgent"
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-800"
-              }`}
-            >
-              Due in &lt; 3 Days ({stats.urgentCount})
-            </button>
-          </div>
-
-          {/* Button to calculate remaining time for all subscriptions */}
-          <button
-            onClick={handleCalculateAll}
-            className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-blue-400 hover:text-blue-300 border border-slate-800 hover:border-slate-700 rounded-lg text-xs font-medium transition flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
-            title="Calculate and show remaining time for all subscriptions"
-          >
-            <span>⏱️</span>
-            <span>Check All Remaining Times</span>
-          </button>
-        </div>
-
-        {/* Subscriptions List */}
+        {/* Unified Subscriptions Ledger */}
         {isLoading ? (
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-12 text-center text-slate-400">
-            <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-            <p className="text-sm font-medium">Loading subscriptions from Supabase PG...</p>
+          <div className="rounded-2xl bg-[#0d1017] border border-white/[0.07] p-12 text-center text-slate-400">
+            <div className="w-6 h-6 border-2 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto mb-2.5" />
+            <p className="text-xs">Loading subscriptions...</p>
           </div>
         ) : displayedSubs.length === 0 ? (
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-8 text-center text-slate-400">
-            <p className="text-sm font-medium">No subscriptions in database.</p>
+          <div className="rounded-2xl bg-[#0d1017] border border-white/[0.07] p-12 text-center space-y-3">
+            <p className="text-sm text-slate-400">No active subscriptions.</p>
             <button
               onClick={handleOpenAdd}
-              className="mt-3 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-lg cursor-pointer shadow-sm shadow-blue-600/30"
+              className="px-4 py-2 bg-orange-500 hover:bg-orange-400 text-white text-xs font-semibold rounded-xl transition cursor-pointer"
             >
               + Add Subscription
             </button>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="rounded-2xl bg-[#0d1017] border border-white/[0.07] divide-y divide-white/[0.06] overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.6)]">
             {displayedSubs.map((sub) => {
               const calc = calculatedTimes[sub.id];
 
               return (
                 <div
                   key={sub.id}
-                  className="bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-xl p-4 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-3 transition"
+                  className="group px-4 sm:px-5 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-white/[0.02] transition-colors"
                 >
-                  {/* Left: Name, Cost, Purchase Date & Renewal Date */}
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-bold text-white text-base">{sub.name}</h3>
-                      <span className="text-xs font-semibold text-slate-200 bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
-                        PKR {sub.amount.toLocaleString()}/mo
-                      </span>
+                  {/* Left: Monogram + Service Name + Renewal Date */}
+                  <div className="flex items-center gap-3.5 min-w-0">
+                    <div className="w-9 h-9 rounded-xl bg-[#151926] border border-white/[0.08] flex items-center justify-center text-xs font-bold uppercase text-orange-300 shrink-0">
+                      {sub.name.slice(0, 2)}
                     </div>
-                    <div className="flex items-center gap-3 text-xs text-slate-400 flex-wrap">
-                      <span>
-                        Purchased:{" "}
-                        <strong className="text-slate-200 font-medium">
-                          {formatDateDisplay(sub.purchaseDate)}
-                        </strong>
-                      </span>
-                      <span>•</span>
-                      <span>
-                        Renews:{" "}
-                        <strong className="text-slate-200 font-medium">
-                          {formatDateDisplay(sub.renewalDate)}
-                        </strong>
-                      </span>
+
+                    <div className="min-w-0">
+                      <h3 className="font-semibold text-white text-sm truncate">
+                        {sub.name}
+                      </h3>
+                      <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-2 flex-wrap">
+                        <span>Renews {formatDateDisplay(sub.renewalDate)}</span>
+                        <span className="text-slate-600">•</span>
+                        <span className="text-slate-500">
+                          Started {formatDateDisplay(sub.purchaseDate)}
+                        </span>
+                      </p>
                     </div>
                   </div>
 
-                  {/* Middle: On-demand Calculate Time Remaining */}
-                  <div className="flex items-center gap-2">
+                  {/* Right: Time Left + Price + Edit/Delete */}
+                  <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4 pt-2 sm:pt-0 border-t sm:border-t-0 border-white/[0.05]">
                     {calc ? (
-                      <div className="flex items-center gap-1.5">
-                        <span
-                          className={`font-mono text-xs font-bold px-2.5 py-1 rounded-md border ${
-                            calc.isExpired
-                              ? "bg-red-950/60 text-red-400 border-red-500/40"
-                              : calc.isUrgent
-                              ? "bg-amber-950/60 text-amber-400 border-amber-500/40"
-                              : "bg-slate-800 text-slate-200 border-slate-700"
-                          }`}
-                        >
-                          {calc.text}
-                        </span>
-                        <button
-                          onClick={() => handleCalculateSingle(sub)}
-                          title="Recalculate remaining time"
-                          className="text-xs text-slate-400 hover:text-white p-1 hover:bg-slate-800 rounded transition cursor-pointer"
-                        >
-                          ↻
-                        </button>
-                      </div>
+                      <button
+                        onClick={() => handleCalculateSingle(sub)}
+                        title="Click to refresh time remaining"
+                        className={`font-mono text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition cursor-pointer ${
+                          calc.isExpired
+                            ? "bg-rose-500/15 text-rose-300 border-rose-500/30"
+                            : calc.isUrgent
+                              ? "bg-amber-500/15 text-amber-300 border-amber-500/30"
+                              : "bg-white/[0.04] text-slate-300 border-white/[0.08]"
+                        }`}
+                      >
+                        {calc.text}
+                      </button>
                     ) : (
                       <button
                         onClick={() => handleCalculateSingle(sub)}
-                        className="text-xs text-blue-400 hover:text-blue-300 bg-blue-950/50 hover:bg-blue-950/80 border border-blue-500/30 px-2.5 py-1 rounded-md font-medium transition cursor-pointer"
+                        className="text-[11px] text-slate-400 hover:text-white bg-white/[0.03] hover:bg-white/[0.07] border border-white/[0.07] px-2.5 py-1 rounded-lg font-medium transition cursor-pointer"
                       >
-                        ⏱️ Check Time Left
+                        ⏱️ Time left
                       </button>
                     )}
-                  </div>
 
-                  {/* Right: Actions */}
-                  <div className="flex items-center gap-1.5 pt-2 md:pt-0 border-t md:border-t-0 border-slate-800 justify-end">
-                    <button
-                      onClick={() => handleOpenEdit(sub)}
-                      className="text-xs text-slate-300 hover:text-white hover:bg-slate-800 px-2.5 py-1 rounded-md border border-slate-700 transition cursor-pointer"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => handleDelete(sub.id)}
-                      className="text-xs text-red-400 hover:text-red-300 hover:bg-red-950/40 px-2.5 py-1 rounded-md border border-red-500/20 transition cursor-pointer"
-                    >
-                      Delete
-                    </button>
+                    <div className="text-right min-w-[96px]">
+                      <span className="text-sm font-bold font-mono text-white tabular-nums">
+                        PKR {sub.amount.toLocaleString()}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => handleOpenEdit(sub)}
+                        title="Edit"
+                        className="w-7 h-7 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] flex items-center justify-center transition cursor-pointer"
+                      >
+                        <svg
+                          className="w-3.5 h-3.5"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                          />
+                        </svg>
+                      </button>
+                      <button
+                        onClick={() => handleDelete(sub.id)}
+                        title="Delete"
+                        className="w-7 h-7 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 flex items-center justify-center transition cursor-pointer"
+                      >
+                        <svg
+                          className="w-3.5 h-3.5"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                          />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -583,40 +536,44 @@ export default function SubscriptionsPage() {
 
       {/* Add / Edit Subscription Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-30 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-slate-900 rounded-xl shadow-2xl border border-slate-800 w-full max-w-sm p-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h2 className="text-base font-bold text-white">
+        <div
+          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setIsModalOpen(false)}
+        >
+          <div
+            className="bg-[#10131c] rounded-2xl shadow-2xl border border-white/[0.08] w-full max-w-sm p-5 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-white/[0.07] pb-3">
+              <h2 className="text-sm font-bold text-white">
                 {editingId ? "Edit Subscription" : "Add Subscription"}
               </h2>
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="text-slate-400 hover:text-white text-sm font-bold cursor-pointer"
+                className="text-slate-400 hover:text-white text-xs cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
             <form onSubmit={handleSave} className="space-y-3.5">
-              {/* 1. Subscription Name */}
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Subscription Name
+                <label className="block text-xs font-medium text-slate-300 mb-1">
+                  Service Name
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Netflix, ChatGPT, Spotify"
+                  placeholder="e.g. Qwen Plus, ChatGPT, Netflix"
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
-                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                  className="w-full px-3 py-2 text-sm bg-[#07090e] border border-white/[0.09] rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-orange-500 transition"
                 />
               </div>
 
-              {/* 2. Cost (PKR / month) */}
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Cost (PKR / month)
+                <label className="block text-xs font-medium text-slate-300 mb-1">
+                  Monthly Cost (PKR)
                 </label>
                 <input
                   type="number"
@@ -626,52 +583,51 @@ export default function SubscriptionsPage() {
                   placeholder="1500"
                   value={formAmount}
                   onChange={(e) => setFormAmount(e.target.value)}
-                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                  className="w-full px-3 py-2 text-sm bg-[#07090e] border border-white/[0.09] rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-orange-500 transition font-mono"
                 />
               </div>
 
-              {/* 3. Purchase Date (Placed before Renewal Date) */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Purchase Date
-                </label>
-                <input
-                  type="date"
-                  required
-                  value={formPurchaseDate}
-                  onChange={(e) => handlePurchaseDateChange(e.target.value)}
-                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition [color-scheme:dark]"
-                />
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                    Start Date
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={formPurchaseDate}
+                    onChange={(e) => handlePurchaseDateChange(e.target.value)}
+                    className="w-full px-2.5 py-2 text-xs bg-[#07090e] border border-white/[0.09] rounded-xl text-white focus:outline-none focus:border-orange-500 transition [color-scheme:dark]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                    Renewal Date
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={formRenewalDate}
+                    onChange={(e) => setFormRenewalDate(e.target.value)}
+                    className="w-full px-2.5 py-2 text-xs bg-[#07090e] border border-white/[0.09] rounded-xl text-white focus:outline-none focus:border-orange-500 transition [color-scheme:dark]"
+                  />
+                </div>
               </div>
 
-              {/* 4. Renewal Date */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Renewal Date
-                </label>
-                <input
-                  type="date"
-                  required
-                  value={formRenewalDate}
-                  onChange={(e) => setFormRenewalDate(e.target.value)}
-                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition [color-scheme:dark]"
-                />
-              </div>
-
-              {/* Modal Buttons */}
-              <div className="pt-3 flex items-center justify-end gap-2 border-t border-slate-800">
+              <div className="pt-2 flex items-center justify-end gap-2 border-t border-white/[0.07]">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition cursor-pointer"
+                  className="px-3.5 py-1.5 text-xs font-medium text-slate-400 hover:text-white rounded-lg transition cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-lg shadow-sm shadow-blue-600/30 transition cursor-pointer"
+                  className="px-4 py-1.5 text-xs font-semibold text-white bg-orange-500 hover:bg-orange-400 rounded-lg transition cursor-pointer"
                 >
-                  {editingId ? "Save Changes" : "Add Subscription"}
+                  {editingId ? "Save" : "Add Subscription"}
                 </button>
               </div>
             </form>

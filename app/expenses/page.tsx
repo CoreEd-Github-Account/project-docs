@@ -1,9 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import Link from "next/link";
 import { LoginForm } from "@/components/LoginForm";
-import { NotificationBell } from "@/components/NotificationBell";
+import { WorkspaceHeader } from "@/components/WorkspaceHeader";
 import type { MonthlyExpense } from "@/lib/types";
 
 export default function MonthlyExpensesPage() {
@@ -17,7 +16,6 @@ export default function MonthlyExpensesPage() {
     setCurrentTimestamp(Date.now());
   }, []);
 
-  // Check auth
   const checkAuth = useCallback(async () => {
     try {
       const res = await fetch("/api/auth");
@@ -43,7 +41,6 @@ export default function MonthlyExpensesPage() {
     }
   };
 
-  // On-demand calculated time remaining state (same as Subscriptions)
   const [calculatedTimes, setCalculatedTimes] = useState<
     Record<
       string,
@@ -51,17 +48,14 @@ export default function MonthlyExpensesPage() {
     >
   >({});
 
-  // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  // Form Fields
   const [formName, setFormName] = useState("");
   const [formCategory, setFormCategory] = useState("anonymous");
   const [formAmount, setFormAmount] = useState("");
   const [formDueDate, setFormDueDate] = useState("");
 
-  // Custom Category Creation State
   const [isAddingCustomCategory, setIsAddingCustomCategory] = useState(false);
   const [newCategoryInput, setNewCategoryInput] = useState("");
 
@@ -70,7 +64,6 @@ export default function MonthlyExpensesPage() {
     "saved"
   );
 
-  // All available categories: only "anonymous" by default + user's DB-synced custom categories
   const availableCategories = useMemo(() => {
     const set = new Set<string>(["anonymous"]);
     customCategories.forEach((cat) => {
@@ -89,11 +82,10 @@ export default function MonthlyExpensesPage() {
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   };
 
-  // Helper: Calculate remaining time until due date (with 3-day reminder detection)
   const calculateRemaining = useCallback((dateStr: string) => {
     if (!dateStr)
       return {
-        text: "No due date",
+        text: "No date",
         isUrgent: false,
         isExpired: false,
         daysLeft: 999,
@@ -101,7 +93,7 @@ export default function MonthlyExpensesPage() {
     const parts = dateStr.split("-").map(Number);
     if (parts.length < 3)
       return {
-        text: "Invalid date",
+        text: "Invalid",
         isUrgent: false,
         isExpired: false,
         daysLeft: 999,
@@ -115,7 +107,7 @@ export default function MonthlyExpensesPage() {
       const endOfDay = new Date(parts[0], parts[1] - 1, parts[2], 23, 59, 59);
       if (now.getTime() <= endOfDay.getTime()) {
         return {
-          text: "Due Today",
+          text: "Due today",
           isUrgent: true,
           isExpired: true,
           daysLeft: 0,
@@ -123,7 +115,7 @@ export default function MonthlyExpensesPage() {
       }
       const daysAgo = Math.floor(Math.abs(diffMs) / (1000 * 60 * 60 * 24));
       return {
-        text: daysAgo > 0 ? `Overdue (${daysAgo}d ago)` : "Overdue / Due",
+        text: daysAgo > 0 ? `${daysAgo}d overdue` : "Overdue",
         isUrgent: true,
         isExpired: true,
         daysLeft: -daysAgo,
@@ -136,14 +128,12 @@ export default function MonthlyExpensesPage() {
 
     let text = "";
     if (days > 0) text += `${days}d `;
-    text += `${hours}h ${minutes}m left`;
+    text += `${hours}h ${minutes}m`;
 
-    // Remind 3 days before due date
     const isUrgent = days <= 3;
     return { text, isUrgent, isExpired: false, daysLeft: days };
   }, []);
 
-  // Fetch monthly expenses & custom categories from database API (with live sync)
   const fetchExpenses = useCallback(async (silent = false) => {
     try {
       if (!silent) setIsLoading(true);
@@ -175,7 +165,6 @@ export default function MonthlyExpensesPage() {
     if (!isAuthenticated) return;
     fetchExpenses(false);
 
-    // Live sync on window focus & every 20s
     const interval = setInterval(() => {
       if (typeof document !== "undefined" && !document.hidden) {
         fetchExpenses(true);
@@ -189,7 +178,6 @@ export default function MonthlyExpensesPage() {
     };
   }, [isAuthenticated, fetchExpenses]);
 
-  // Live-sync custom category creation with database
   const handleCreateCustomCategory = async () => {
     const clean = newCategoryInput.trim();
     if (!clean) return;
@@ -226,13 +214,11 @@ export default function MonthlyExpensesPage() {
     }
   };
 
-  // Button Action: Calculate time remaining for single payable
   const handleCalculateSingle = (exp: MonthlyExpense) => {
     const res = calculateRemaining(exp.dueDate);
     setCalculatedTimes((prev) => ({ ...prev, [exp.id]: res }));
   };
 
-  // Button Action: Calculate time remaining for ALL payables
   const handleCalculateAll = () => {
     const nextMap: Record<
       string,
@@ -244,7 +230,6 @@ export default function MonthlyExpensesPage() {
     setCalculatedTimes(nextMap);
   };
 
-  // Open modal to add new payable
   const handleOpenAdd = () => {
     setEditingId(null);
     setFormName("");
@@ -256,7 +241,6 @@ export default function MonthlyExpensesPage() {
     setIsModalOpen(true);
   };
 
-  // Open modal to edit payable
   const handleOpenEdit = (exp: MonthlyExpense) => {
     setEditingId(exp.id);
     setFormName(exp.name);
@@ -268,7 +252,6 @@ export default function MonthlyExpensesPage() {
     setIsModalOpen(true);
   };
 
-  // Save (Add or Update) via API
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName.trim() || !formDueDate) return;
@@ -318,7 +301,6 @@ export default function MonthlyExpensesPage() {
     }
   };
 
-  // Mark paid for current cycle & roll due date forward by +1 month
   const handleMarkPaidNextMonth = async (exp: MonthlyExpense) => {
     const parts = exp.dueDate.split("-").map(Number);
     let nextDueDate = exp.dueDate;
@@ -360,7 +342,6 @@ export default function MonthlyExpensesPage() {
     }
   };
 
-  // Delete via API
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this monthly expense from database?")) return;
 
@@ -386,7 +367,6 @@ export default function MonthlyExpensesPage() {
     }
   };
 
-  // Format date display (e.g. Nov 25, 2026)
   const formatDateDisplay = (dateStr: string) => {
     if (!dateStr) return "-";
     const parts = dateStr.split("-").map(Number);
@@ -399,7 +379,6 @@ export default function MonthlyExpensesPage() {
     });
   };
 
-  // Check if an expense is within the 3-day reminder window
   const isWithinThreeDays = useCallback(
     (dueDateStr: string) => {
       if (!currentTimestamp || !dueDateStr) return false;
@@ -419,7 +398,6 @@ export default function MonthlyExpensesPage() {
     [currentTimestamp]
   );
 
-  // Statistics & 3-Day Reminder items
   const stats = useMemo(() => {
     let totalMonthly = 0;
     const reminderItems: MonthlyExpense[] = [];
@@ -438,7 +416,6 @@ export default function MonthlyExpensesPage() {
     };
   }, [expenses, isWithinThreeDays]);
 
-  // Filtered List
   const displayedExpenses = useMemo(() => {
     return [...expenses]
       .filter((exp) => {
@@ -450,17 +427,14 @@ export default function MonthlyExpensesPage() {
       .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
   }, [expenses, filter, isWithinThreeDays]);
 
-  // Auth loading state
   if (isAuthenticated === null) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-400">
-        <div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin mb-3"></div>
-        <p className="text-sm font-medium">Verifying access...</p>
+      <div className="min-h-screen bg-[#07090e] flex flex-col items-center justify-center text-slate-400">
+        <div className="w-7 h-7 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
-  // Unauthenticated -> Show Login Form
   if (!isAuthenticated) {
     return (
       <LoginForm
@@ -472,191 +446,112 @@ export default function MonthlyExpensesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col">
-      {/* Top Header */}
-      <header className="bg-slate-900/90 border-b border-slate-800 sticky top-0 z-10 backdrop-blur-md">
-        <div className="max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-teal-600 flex items-center justify-center font-bold text-white text-sm shadow-md shadow-teal-600/20">
-              🧾
-            </div>
-            <div>
-              <h1 className="text-base font-bold text-white leading-tight">
-                Monthly Expense
-              </h1>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                <span className="text-[11px] text-slate-400">
-                  Supabase PG:{" "}
-                  {saveStatus === "saving"
-                    ? "Saving..."
-                    : saveStatus === "error"
-                      ? "Sync Error"
-                      : "Synced"}
-                </span>
-              </div>
-            </div>
-          </div>
+    <div className="min-h-screen bg-[#07090e] text-slate-100 font-sans flex flex-col">
+      <WorkspaceHeader
+        title="Monthly Expense"
+        icon="🧾"
+        saveStatus={saveStatus}
+        primaryAction={{
+          label: "Add Payable",
+          onClick: handleOpenAdd,
+          icon: "+",
+        }}
+        onLogout={handleLogout}
+      />
 
-          <div className="flex items-center gap-2 flex-wrap">
-            <Link
-              href="/"
-              className="text-xs text-slate-300 hover:text-white px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800/60 hover:bg-slate-800 transition"
-            >
-              ← Hub
-            </Link>
-            <Link
-              href="/subscriptions"
-              className="text-xs text-slate-300 hover:text-white px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800/60 hover:bg-slate-800 transition"
-            >
-              Subscriptions
-            </Link>
-            <Link
-              href="/commands"
-              className="text-xs text-slate-300 hover:text-white px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800/60 hover:bg-slate-800 transition"
-            >
-              Commands
-            </Link>
-            <button
-              onClick={handleOpenAdd}
-              className="px-3 py-1.5 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-xs font-medium transition cursor-pointer shadow-sm shadow-teal-600/30"
-            >
-              + Add Payable
-            </button>
-            <NotificationBell />
-            <button
-              onClick={handleLogout}
-              className="text-xs text-red-400 hover:text-red-300 bg-red-950/30 hover:bg-red-950/60 px-2.5 py-1.5 rounded-lg border border-red-500/30 transition cursor-pointer"
-            >
-              Logout
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Container */}
-      <main className="flex-1 max-w-4xl w-full mx-auto p-4 sm:p-6 space-y-4">
-        {/* 3-Day Automatic Reminder Banner */}
+      <main className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 py-8 space-y-5">
+        {/* 3-Day Urgent Strip (only visible when bills are due within 3 days) */}
         {stats.reminderItems.length > 0 && (
-          <div className="rounded-xl bg-amber-950/40 border border-amber-500/40 p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg">
-            <div className="flex items-start sm:items-center gap-3">
-              <span className="text-xl">🔔</span>
-              <div>
-                <p className="text-xs font-bold text-amber-300">
-                  3-Day Payable Reminder ({stats.reminderItems.length}{" "}
-                  {stats.reminderItems.length === 1 ? "bill" : "bills"} due soon)
-                </p>
-                <p className="text-xs text-slate-300 mt-0.5">
-                  {stats.reminderItems
-                    .map(
-                      (item) =>
-                        `${item.name} (PKR ${item.amount.toLocaleString()} • Due ${formatDateDisplay(
-                          item.dueDate
-                        )})`
-                    )
-                    .join("  |  ")}
-                </p>
-              </div>
+          <div className="rounded-xl bg-amber-500/10 border border-amber-500/30 px-4 py-2.5 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 min-w-0 text-xs">
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0" />
+              <span className="font-semibold text-amber-200 truncate">
+                Due within 3 days:{" "}
+                {stats.reminderItems
+                  .map((i) => `${i.name} (PKR ${i.amount.toLocaleString()})`)
+                  .join(" • ")}
+              </span>
             </div>
             <button
               onClick={() => setFilter("reminder")}
-              className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-500/40 text-xs font-semibold transition cursor-pointer shrink-0"
+              className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 text-[11px] font-semibold transition cursor-pointer shrink-0"
             >
-              View Due Bills
+              Filter
             </button>
           </div>
         )}
 
-        {/* Simple Summary Bar */}
-        <div className="grid grid-cols-3 gap-3 bg-slate-900 p-4 rounded-xl border border-slate-800 shadow-md text-center">
-          <div>
-            <span className="text-xs text-slate-400 block">
-              Total Monthly Bills
-            </span>
-            <span className="text-lg font-bold text-white">
-              {expenses.length}
-            </span>
+        {/* Minimal Single-Row Header: Title + Filters on Left, Total + Countdown on Right */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2">
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-xl font-bold text-white tracking-tight">
+              Monthly Expenses
+            </h1>
+            <div className="flex items-center gap-1 bg-[#10131c] p-1 rounded-xl border border-white/[0.07]">
+              <button
+                onClick={() => setFilter("all")}
+                className={`px-3 py-1 rounded-lg text-xs font-medium transition cursor-pointer ${
+                  filter === "all"
+                    ? "bg-white/[0.1] text-white shadow-xs"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                All ({expenses.length})
+              </button>
+              <button
+                onClick={() => setFilter("reminder")}
+                className={`px-3 py-1 rounded-lg text-xs font-medium transition cursor-pointer flex items-center gap-1.5 ${
+                  filter === "reminder"
+                    ? "bg-amber-500/20 text-amber-300"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                <span>Due &le; 3d</span>
+                <span className="font-mono text-[11px] opacity-80">
+                  {stats.reminderCount}
+                </span>
+              </button>
+            </div>
           </div>
-          <div className="border-l border-slate-800">
-            <span className="text-xs text-slate-400 block">
-              Due in &le; 3 Days
-            </span>
-            <span
-              className={`text-lg font-bold ${
-                stats.reminderCount > 0 ? "text-amber-400" : "text-emerald-400"
-              }`}
+
+          <div className="flex items-center justify-between sm:justify-end gap-3">
+            <div className="flex items-baseline gap-1.5 px-3 py-1.5 rounded-xl bg-[#10131c] border border-white/[0.07]">
+              <span className="text-[11px] text-slate-400">Total</span>
+              <span className="text-sm font-bold font-mono text-white tabular-nums">
+                PKR {stats.totalMonthly.toLocaleString()}
+              </span>
+              <span className="text-[10px] text-slate-500 font-mono">/mo</span>
+            </div>
+
+            <button
+              onClick={handleCalculateAll}
+              className="px-3 py-1.5 rounded-xl bg-[#10131c] hover:bg-white/[0.06] text-slate-300 hover:text-white border border-white/[0.07] text-xs font-medium transition flex items-center gap-1.5 cursor-pointer"
+              title="Calculate remaining time for all bills"
             >
-              {stats.reminderCount}
-            </span>
-          </div>
-          <div className="border-l border-slate-800">
-            <span className="text-xs text-slate-400 block">
-              Total Monthly Payable
-            </span>
-            <span className="text-lg font-bold text-white font-mono">
-              PKR {stats.totalMonthly.toLocaleString()}
-            </span>
+              <span>⏱️</span>
+              <span>Time Left</span>
+            </button>
           </div>
         </div>
 
-        {/* Toolbar: Filters and Calculate Remaining Time button */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => setFilter("all")}
-              className={`px-3 py-1 rounded-md text-xs font-medium transition cursor-pointer ${
-                filter === "all"
-                  ? "bg-teal-600 text-white shadow-sm"
-                  : "bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-800"
-              }`}
-            >
-              All Payables ({expenses.length})
-            </button>
-            <button
-              onClick={() => setFilter("reminder")}
-              className={`px-3 py-1 rounded-md text-xs font-medium transition cursor-pointer ${
-                filter === "reminder"
-                  ? "bg-teal-600 text-white shadow-sm"
-                  : "bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-800"
-              }`}
-            >
-              3-Day Reminder ({stats.reminderCount})
-            </button>
-          </div>
-
-          {/* Button to calculate remaining time for all monthly payables */}
-          <button
-            onClick={handleCalculateAll}
-            className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-teal-400 hover:text-teal-300 border border-slate-800 hover:border-slate-700 rounded-lg text-xs font-medium transition flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
-            title="Calculate and show remaining time for all monthly bills"
-          >
-            <span>⏱️</span>
-            <span>Check All Remaining Times</span>
-          </button>
-        </div>
-
-        {/* Monthly Expenses List */}
+        {/* Unified Minimal Ledger */}
         {isLoading ? (
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-12 text-center text-slate-400">
-            <div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-            <p className="text-sm font-medium">
-              Loading monthly expenses from Supabase PG...
-            </p>
+          <div className="rounded-2xl bg-[#0d1017] border border-white/[0.07] p-12 text-center text-slate-400">
+            <div className="w-6 h-6 border-2 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto mb-2.5" />
+            <p className="text-xs">Loading payables...</p>
           </div>
         ) : displayedExpenses.length === 0 ? (
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-8 text-center text-slate-400">
-            <p className="text-sm font-medium">
-              No monthly expenses found. Add your monthly payables here.
-            </p>
+          <div className="rounded-2xl bg-[#0d1017] border border-white/[0.07] p-12 text-center space-y-3">
+            <p className="text-sm text-slate-400">No monthly expenses found.</p>
             <button
               onClick={handleOpenAdd}
-              className="mt-3 px-4 py-2 bg-teal-600 hover:bg-teal-500 text-white text-xs font-medium rounded-lg cursor-pointer shadow-sm shadow-teal-600/30"
+              className="px-4 py-2 bg-orange-500 hover:bg-orange-400 text-white text-xs font-semibold rounded-xl transition cursor-pointer"
             >
-              + Add Monthly Expense
+              + Add Payable
             </button>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="rounded-2xl bg-[#0d1017] border border-white/[0.07] divide-y divide-white/[0.06] overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.6)]">
             {displayedExpenses.map((exp) => {
               const calc = calculatedTimes[exp.id];
               const dueSoon = isWithinThreeDays(exp.dueDate);
@@ -664,100 +559,125 @@ export default function MonthlyExpensesPage() {
               return (
                 <div
                   key={exp.id}
-                  className={`bg-slate-900 border rounded-xl p-4 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-3 transition ${
+                  className={`group px-4 sm:px-5 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors ${
                     dueSoon
-                      ? "border-amber-500/45 hover:border-amber-500/70"
-                      : "border-slate-800 hover:border-slate-700"
+                      ? "bg-amber-500/[0.03] hover:bg-amber-500/[0.06]"
+                      : "hover:bg-white/[0.02]"
                   }`}
                 >
-                  {/* Left: Icon, Name, Category, Amount, Due Date & 3-Day Reminder Badge */}
-                  <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-lg shrink-0 mt-0.5">
-                      🧾
+                  {/* Left: Avatar + Name + Category + Due Date */}
+                  <div className="flex items-center gap-3.5 min-w-0">
+                    <div
+                      className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold uppercase shrink-0 border ${
+                        dueSoon
+                          ? "bg-amber-500/15 border-amber-500/35 text-amber-300"
+                          : "bg-[#151926] border-white/[0.08] text-slate-300"
+                      }`}
+                    >
+                      {exp.name.slice(0, 2)}
                     </div>
-                    <div className="space-y-1">
+
+                    <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="font-bold text-white text-base">
+                        <h3 className="font-semibold text-white text-sm truncate">
                           {exp.name}
                         </h3>
-                        <span className="text-[11px] font-medium text-teal-300 bg-teal-950/60 px-2 py-0.5 rounded border border-teal-500/30">
+                        <span className="text-[11px] font-medium text-slate-400 bg-white/[0.04] px-2 py-0.5 rounded-md border border-white/[0.07]">
                           {exp.category || "anonymous"}
                         </span>
-                        <span className="text-xs font-semibold text-slate-200 bg-slate-800 px-2 py-0.5 rounded border border-slate-700 font-mono">
-                          PKR {exp.amount.toLocaleString()}/mo
-                        </span>
                         {dueSoon && (
-                          <span className="text-[10px] font-bold uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded-full">
-                            🔔 Reminder (&le; 3d)
+                          <span className="text-[10px] font-semibold text-amber-300 bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-md">
+                            Due soon
                           </span>
                         )}
                       </div>
-
-                      <div className="flex items-center gap-3 text-xs text-slate-400 flex-wrap">
-                        <span>
-                          Due Date:{" "}
-                          <strong className="text-slate-200 font-medium">
-                            {formatDateDisplay(exp.dueDate)}
-                          </strong>
-                        </span>
-                      </div>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Due {formatDateDisplay(exp.dueDate)}
+                      </p>
                     </div>
                   </div>
 
-                  {/* Middle: On-demand Calculate Time Remaining (same as Subscription) */}
-                  <div className="flex items-center gap-2">
+                  {/* Right: Time Left + Price + Compact Actions */}
+                  <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4 pt-2 sm:pt-0 border-t sm:border-t-0 border-white/[0.05]">
+                    {/* Time Left Pill */}
                     {calc ? (
-                      <div className="flex items-center gap-1.5">
-                        <span
-                          className={`font-mono text-xs font-bold px-2.5 py-1 rounded-md border ${
-                            calc.isExpired
-                              ? "bg-red-950/60 text-red-400 border-red-500/40"
-                              : calc.isUrgent
-                                ? "bg-amber-950/60 text-amber-400 border-amber-500/40"
-                                : "bg-slate-800 text-slate-200 border-slate-700"
-                          }`}
-                        >
-                          {calc.text}
-                        </span>
-                        <button
-                          onClick={() => handleCalculateSingle(exp)}
-                          title="Recalculate remaining time"
-                          className="text-xs text-slate-400 hover:text-white p-1 hover:bg-slate-800 rounded transition cursor-pointer"
-                        >
-                          ↻
-                        </button>
-                      </div>
+                      <button
+                        onClick={() => handleCalculateSingle(exp)}
+                        title="Click to refresh time remaining"
+                        className={`font-mono text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition cursor-pointer ${
+                          calc.isExpired
+                            ? "bg-rose-500/15 text-rose-300 border-rose-500/30"
+                            : calc.isUrgent
+                              ? "bg-amber-500/15 text-amber-300 border-amber-500/30"
+                              : "bg-white/[0.04] text-slate-300 border-white/[0.08]"
+                        }`}
+                      >
+                        {calc.text}
+                      </button>
                     ) : (
                       <button
                         onClick={() => handleCalculateSingle(exp)}
-                        className="text-xs text-teal-400 hover:text-teal-300 bg-teal-950/50 hover:bg-teal-950/80 border border-teal-500/30 px-2.5 py-1 rounded-md font-medium transition cursor-pointer"
+                        className="text-[11px] text-slate-400 hover:text-white bg-white/[0.03] hover:bg-white/[0.07] border border-white/[0.07] px-2.5 py-1 rounded-lg font-medium transition cursor-pointer"
                       >
-                        ⏱️ Check Time Left
+                        ⏱️ Time left
                       </button>
                     )}
-                  </div>
 
-                  {/* Right: Actions */}
-                  <div className="flex items-center gap-1.5 pt-2 md:pt-0 border-t md:border-t-0 border-slate-800 justify-end">
-                    <button
-                      onClick={() => handleMarkPaidNextMonth(exp)}
-                      title="Mark this month's bill paid and advance due date by 1 month"
-                      className="text-xs text-emerald-300 hover:text-white bg-emerald-950/40 hover:bg-emerald-600/30 px-2.5 py-1 rounded-md border border-emerald-500/30 transition cursor-pointer"
-                    >
-                      ✓ Paid (+1 Mo)
-                    </button>
-                    <button
-                      onClick={() => handleOpenEdit(exp)}
-                      className="text-xs text-slate-300 hover:text-white hover:bg-slate-800 px-2.5 py-1 rounded-md border border-slate-700 transition cursor-pointer"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => handleDelete(exp.id)}
-                      className="text-xs text-red-400 hover:text-red-300 hover:bg-red-950/40 px-2.5 py-1 rounded-md border border-red-500/20 transition cursor-pointer"
-                    >
-                      Delete
-                    </button>
+                    {/* Prominent Amount */}
+                    <div className="text-right min-w-[96px]">
+                      <span className="text-sm font-bold font-mono text-white tabular-nums">
+                        PKR {exp.amount.toLocaleString()}
+                      </span>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => handleMarkPaidNextMonth(exp)}
+                        title="Mark paid and advance due date by 1 month"
+                        className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/25 transition cursor-pointer"
+                      >
+                        ✓ Paid
+                      </button>
+                      <button
+                        onClick={() => handleOpenEdit(exp)}
+                        title="Edit"
+                        className="w-7 h-7 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] flex items-center justify-center transition cursor-pointer"
+                      >
+                        <svg
+                          className="w-3.5 h-3.5"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                          />
+                        </svg>
+                      </button>
+                      <button
+                        onClick={() => handleDelete(exp.id)}
+                        title="Delete"
+                        className="w-7 h-7 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 flex items-center justify-center transition cursor-pointer"
+                      >
+                        <svg
+                          className="w-3.5 h-3.5"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                          />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -768,15 +688,21 @@ export default function MonthlyExpensesPage() {
 
       {/* Add / Edit Monthly Payable Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-30 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-slate-900 rounded-xl shadow-2xl border border-slate-800 w-full max-w-sm p-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h2 className="text-base font-bold text-white">
-                {editingId ? "Edit Monthly Payable" : "Add Monthly Payable"}
+        <div
+          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setIsModalOpen(false)}
+        >
+          <div
+            className="bg-[#10131c] rounded-2xl shadow-2xl border border-white/[0.08] w-full max-w-sm p-5 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-white/[0.07] pb-3">
+              <h2 className="text-sm font-bold text-white">
+                {editingId ? "Edit Payable" : "Add Payable"}
               </h2>
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="text-slate-400 hover:text-white text-sm font-bold cursor-pointer"
+                className="text-slate-400 hover:text-white text-xs cursor-pointer"
               >
                 ✕
               </button>
@@ -785,23 +711,23 @@ export default function MonthlyExpensesPage() {
             <form onSubmit={handleSave} className="space-y-3.5">
               {/* 1. expance name */}
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                <label className="block text-xs font-medium text-slate-300 mb-1">
                   expance name
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Internet Bill, Water Bill"
+                  placeholder="e.g. Internet, Kameti, Electricity"
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
-                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition"
+                  className="w-full px-3 py-2 text-sm bg-[#07090e] border border-white/[0.09] rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-orange-500 transition"
                 />
               </div>
 
               {/* 2. Category ("anonymous" badge + custom category creator) */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-xs font-semibold text-slate-300">
+                  <label className="block text-xs font-medium text-slate-300">
                     Category
                   </label>
                   <button
@@ -809,9 +735,9 @@ export default function MonthlyExpensesPage() {
                     onClick={() =>
                       setIsAddingCustomCategory(!isAddingCustomCategory)
                     }
-                    className="text-[11px] font-semibold text-teal-400 hover:text-teal-300 transition cursor-pointer"
+                    className="text-[11px] font-semibold text-orange-400 hover:text-orange-300 transition cursor-pointer"
                   >
-                    {isAddingCustomCategory ? "Cancel" : "+ Create custom"}
+                    {isAddingCustomCategory ? "Cancel" : "+ Custom"}
                   </button>
                 </div>
 
@@ -821,13 +747,13 @@ export default function MonthlyExpensesPage() {
                       key={cat}
                       type="button"
                       onClick={() => setFormCategory(cat)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium border flex items-center gap-1.5 transition cursor-pointer ${
+                      className={`px-2.5 py-1 rounded-lg text-xs font-medium border flex items-center gap-1.5 transition cursor-pointer ${
                         formCategory === cat
-                          ? "bg-teal-600/25 border-teal-500 text-teal-200 shadow-sm"
-                          : "bg-slate-950 border-slate-800 text-slate-400 hover:text-white"
+                          ? "bg-orange-500/20 border-orange-500/50 text-orange-200"
+                          : "bg-[#07090e] border-white/[0.08] text-slate-400 hover:text-white"
                       }`}
                     >
-                      <span className="w-1.5 h-1.5 rounded-full bg-teal-400" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-orange-400" />
                       <span>{cat}</span>
                     </button>
                   ))}
@@ -837,7 +763,7 @@ export default function MonthlyExpensesPage() {
                   <div className="mt-2 flex items-center gap-1.5">
                     <input
                       type="text"
-                      placeholder="New category name..."
+                      placeholder="Category name..."
                       value={newCategoryInput}
                       onChange={(e) => setNewCategoryInput(e.target.value)}
                       onKeyDown={(e) => {
@@ -846,12 +772,13 @@ export default function MonthlyExpensesPage() {
                           handleCreateCustomCategory();
                         }
                       }}
-                      className="flex-1 px-2.5 py-1.5 text-xs bg-slate-950 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
+                      className="flex-1 px-2.5 py-1.5 text-xs bg-[#07090e] border border-white/[0.1] rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-orange-500"
+                      autoFocus
                     />
                     <button
                       type="button"
                       onClick={handleCreateCustomCategory}
-                      className="px-3 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-500 text-white text-xs font-semibold transition cursor-pointer"
+                      className="px-3 py-1.5 text-xs font-semibold bg-orange-500 hover:bg-orange-400 text-white rounded-lg transition cursor-pointer"
                     >
                       Add
                     </button>
@@ -861,49 +788,48 @@ export default function MonthlyExpensesPage() {
 
               {/* 3. Amount (PKR / month) */}
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Amount (PKR / month)
+                <label className="block text-xs font-medium text-slate-300 mb-1">
+                  Amount (PKR)
                 </label>
                 <input
                   type="number"
                   step="1"
                   min="0"
                   required
-                  placeholder="4500"
+                  placeholder="2500"
                   value={formAmount}
                   onChange={(e) => setFormAmount(e.target.value)}
-                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition"
+                  className="w-full px-3 py-2 text-sm bg-[#07090e] border border-white/[0.09] rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-orange-500 transition font-mono"
                 />
               </div>
 
-              {/* 4. Monthly Due Date */}
+              {/* 4. Due Date */}
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Due Date (Reminds 3 days before)
+                <label className="block text-xs font-medium text-slate-300 mb-1">
+                  Due Date
                 </label>
                 <input
                   type="date"
                   required
                   value={formDueDate}
                   onChange={(e) => setFormDueDate(e.target.value)}
-                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition [color-scheme:dark]"
+                  className="w-full px-3 py-2 text-sm bg-[#07090e] border border-white/[0.09] rounded-xl text-white focus:outline-none focus:border-orange-500 transition [color-scheme:dark]"
                 />
               </div>
 
-              {/* Modal Buttons */}
-              <div className="pt-3 flex items-center justify-end gap-2 border-t border-slate-800">
+              <div className="pt-2 flex items-center justify-end gap-2 border-t border-white/[0.07]">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition cursor-pointer"
+                  className="px-3.5 py-1.5 text-xs font-medium text-slate-400 hover:text-white rounded-lg transition cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-xs font-semibold text-white bg-teal-600 hover:bg-teal-500 rounded-lg shadow-sm shadow-teal-600/30 transition cursor-pointer"
+                  className="px-4 py-1.5 text-xs font-semibold text-white bg-orange-500 hover:bg-orange-400 rounded-lg transition cursor-pointer"
                 >
-                  {editingId ? "Save Changes" : "Add Payable"}
+                  {editingId ? "Save" : "Add Payable"}
                 </button>
               </div>
             </form>
