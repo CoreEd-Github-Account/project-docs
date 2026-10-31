@@ -2267,55 +2267,35 @@ export function TaskNotepad({
   return (
     <div className="bg-[#0d1017] p-4 sm:p-6 rounded-2xl border border-white/[0.07] space-y-5 flex flex-col min-h-[640px] relative">
       {/* HEADER SECTION */}
-      <div className="border-b border-white/[0.07] pb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <h1 className="text-base font-bold text-white tracking-tight">Tasks</h1>
-            <span className="text-xs px-2.5 py-0.5 rounded-full bg-white/[0.05] text-slate-300 font-medium border border-white/[0.08] truncate max-w-[220px]">
-              {project.name}
-            </span>
-            {role !== "owner" && (
-              <span
-                className={`text-xs px-2.5 py-0.5 rounded-full font-semibold border ${
-                  role === "full"
-                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
-                    : role === "edit_no_delete"
-                    ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
-                    : "bg-white/[0.05] text-slate-400 border-white/[0.08]"
-                }`}
-              >
-                {role === "full"
-                  ? "Full Access"
+      <div className="border-b border-white/[0.07] pb-4 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <h1 className="text-base font-bold text-white tracking-tight">Tasks</h1>
+          {role !== "owner" && (
+            <span
+              className={`text-xs px-2.5 py-0.5 rounded-full font-semibold border ${
+                role === "full"
+                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
                   : role === "edit_no_delete"
-                  ? "Read & Edit (No Delete)"
-                  : "Read Only"}
-              </span>
-            )}
-            {isDbLoading && (
-              <span className="text-[11px] text-slate-400 animate-pulse flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-white"></span> Loading tasks...
-              </span>
-            )}
-            {dbNotice && (
-              <span className="text-[11px] text-emerald-400 bg-emerald-950/40 border border-emerald-500/30 px-2.5 py-0.5 rounded-full flex items-center gap-1">
-                ✓ {dbNotice}
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* TOP ACTION BUTTONS */}
-        <div className="flex items-center flex-wrap gap-2">
-          {/* Save Button */}
-          {canEdit && (
-            <button
-              onClick={handleManualSave}
-              type="button"
-              className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-medium bg-[#10131c] hover:bg-white/[0.06] text-slate-200 hover:text-white border border-white/[0.08] rounded-lg transition cursor-pointer active:scale-95"
-              title="Save tasks to database immediately"
+                  ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
+                  : "bg-white/[0.05] text-slate-400 border-white/[0.08]"
+              }`}
             >
-              <span>{justSaved ? "Saved" : "Save"}</span>
-            </button>
+              {role === "full"
+                ? "Full Access"
+                : role === "edit_no_delete"
+                ? "Read & Edit (No Delete)"
+                : "Read Only"}
+            </span>
+          )}
+          {isDbLoading && (
+            <span className="text-[11px] text-slate-400 animate-pulse flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-white"></span> Loading tasks...
+            </span>
+          )}
+          {dbNotice && (
+            <span className="text-[11px] text-emerald-400 bg-emerald-950/40 border border-emerald-500/30 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+              ✓ {dbNotice}
+            </span>
           )}
         </div>
       </div>
