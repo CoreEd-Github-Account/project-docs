@@ -735,8 +735,7 @@ export function TaskNotepad({
   const [chatCurrentUserId, setChatCurrentUserId] = useState<string | null>(null);
   const chatMessagesEndRef = useRef<HTMLDivElement | null>(null);
 
-  // View state: 'list' (default) | 'grouped' | 'notepad'
-  const [viewMode, setViewMode] = useState<"board" | "list" | "notepad">("board");
+  // List view by status stages is the default and only view mode
   // Active stage filter in list view: 'all' | TaskStage
   const [filterStage, setFilterStage] = useState<"all" | TaskStage>("all");
   // Search query
@@ -1962,12 +1961,7 @@ export function TaskNotepad({
     }
   };
 
-  // Switch between List, Grouped, and Read-Only Notepad mode
-  const handleSwitchMode = (mode: "board" | "list" | "notepad") => {
-    setViewMode(mode);
-  };
-
-  // Metrics
+// Metrics
   const totalCount = tasks.length;
   const inProgressCount = tasks.filter((t) => t.stage === "inprogress").length;
   const completedCount = tasks.filter((t) => t.stage === "completed" || t.stage === "done").length;
@@ -2029,213 +2023,6 @@ export function TaskNotepad({
     const match = projectStages.filter((s) => (s.slug || s.id) === filterStage);
     return match.length > 0 ? match : projectStages;
   }, [projectStages, filterStage]);
-
-  // Render individual task as a stage card for board/column view
-  const renderStageTaskCard = (task: TaskItem) => {
-    const currentSlug = getTaskStageSlug(task.stage, projectStages);
-    const cfg = getStageConfig(currentSlug);
-    const taskHeading = task.heading || task.title;
-    const taskComments = parseComments(task.comments);
-    const hasComments = taskComments.length > 0;
-    const hasTimeline = Boolean(task.startDate || task.endDate);
-
-    const doneStage = projectStages.find((s) => s.slug === "completed" || s.slug === "done" || s.slug === "finished")?.slug || projectStages[projectStages.length - 1]?.slug || "completed";
-    const isTaskDone = currentSlug === doneStage || currentSlug === "completed" || currentSlug === "done";
-
-    return (
-      <div
-        key={task.id}
-        className="group bg-[#0d1017] hover:bg-[#11141e] border border-white/[0.08] hover:border-white/[0.16] rounded-xl p-3.5 space-y-2.5 transition shadow-xs"
-      >
-        {/* Header: Checkbox + Title + Actions */}
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex items-start gap-2.5 min-w-0 flex-1">
-            <button
-              type="button"
-              disabled={isReadOnly}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (!isReadOnly) handleToggleCheck(task.id);
-              }}
-              className={`w-4 h-4 rounded mt-0.5 border flex items-center justify-center transition-all shrink-0 ${
-                isReadOnly ? "cursor-not-allowed opacity-60" : "cursor-pointer active:scale-95"
-              } ${
-                isTaskDone
-                  ? "bg-white border-white text-slate-950"
-                  : "border-white/[0.2] bg-white/[0.03] hover:border-white/50 text-transparent"
-              }`}
-              title={isTaskDone ? "Mark as in progress" : "Mark as done"}
-            >
-              <svg className={`w-3 h-3 ${isTaskDone ? "scale-100" : "scale-0"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-              </svg>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveDetailTaskId(task.id)}
-              className="text-left font-semibold hover:text-white transition-colors cursor-pointer min-w-0 flex-1 group/title"
-              title="Click to view task details"
-            >
-              <span
-                className={`text-xs sm:text-sm font-semibold break-words leading-snug line-clamp-2 transition-colors ${
-                  isTaskDone
-                    ? "line-through text-slate-500"
-                    : "text-slate-100 group-hover/title:text-white"
-                }`}
-              >
-                {taskHeading}
-              </span>
-            </button>
-          </div>
-
-          <div className="flex items-center gap-0.5 opacity-60 group-hover:opacity-100 transition shrink-0">
-            <button
-              type="button"
-              onClick={() => setActiveDetailTaskId(task.id)}
-              className="p-1 text-slate-400 hover:text-white rounded hover:bg-white/[0.06] transition cursor-pointer"
-              title="View details"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-              </svg>
-            </button>
-            {canEdit && (
-              <button
-                type="button"
-                onClick={() => openEditForm(task)}
-                className="p-1 text-slate-400 hover:text-white rounded hover:bg-white/[0.06] transition cursor-pointer"
-                title="Edit task"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                </svg>
-              </button>
-            )}
-            {canDelete && (
-              <button
-                type="button"
-                onClick={() => handleDeleteTask(task.id)}
-                className="p-1 text-slate-500 hover:text-rose-400 rounded hover:bg-rose-500/10 transition cursor-pointer"
-                title="Delete task"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Description snippet if present */}
-        {task.description && (
-          <p
-            onClick={() => setActiveDetailTaskId(task.id)}
-            className="text-[11px] text-slate-400 line-clamp-2 leading-relaxed cursor-pointer hover:text-slate-300"
-          >
-            {task.description}
-          </p>
-        )}
-
-        {/* Metadata Chips: Folder, Attachments, Comments, Timeline */}
-        <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-          {task.folder && (
-            <span
-              onClick={(e) => {
-                e.stopPropagation();
-                setActiveFolder(task.folder!);
-              }}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-white/[0.04] border border-white/[0.08] text-slate-300 hover:bg-white/[0.08] cursor-pointer transition shrink-0"
-              title={`Folder: ${task.folder}`}
-            >
-              📁 {task.folder}
-            </span>
-          )}
-
-          {task.attachments && task.attachments.length > 0 && (
-            <span
-              onClick={(e) => {
-                e.stopPropagation();
-                setActiveDetailTaskId(task.id);
-              }}
-              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-white/[0.04] border border-white/[0.08] text-slate-300 hover:bg-white/[0.08] cursor-pointer transition shrink-0"
-              title={`${task.attachments.length} attachment(s)`}
-            >
-              <span>🖼️ {task.attachments.length}</span>
-            </span>
-          )}
-
-          {task.voiceNote && (
-            <span
-              onClick={(e) => {
-                e.stopPropagation();
-                setActiveDetailTaskId(task.id);
-              }}
-              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-white/[0.04] border border-white/[0.08] text-slate-300 hover:bg-white/[0.08] cursor-pointer transition shrink-0"
-              title="Voice note available"
-            >
-              <span>🎙️ Voice</span>
-            </span>
-          )}
-
-          <button
-            type="button"
-            onClick={() => setActiveDetailTaskId(task.id)}
-            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium transition cursor-pointer ${
-              hasComments
-                ? "bg-white/[0.06] text-slate-200 border border-white/[0.1] hover:bg-white/[0.1]"
-                : "text-slate-500 hover:text-slate-400 border border-transparent"
-            }`}
-            title={`${taskComments.length} comment(s)`}
-          >
-            <svg className="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-            </svg>
-            <span>{taskComments.length}</span>
-          </button>
-
-          {hasTimeline && (
-            <span className="inline-flex items-center gap-1 text-[10px] text-slate-400 font-mono ml-auto">
-              {task.startDate ? task.startDate.split("-").slice(1).join("/") : "—"}
-              {" → "}
-              {task.endDate ? task.endDate.split("-").slice(1).join("/") : "—"}
-            </span>
-          )}
-        </div>
-
-        {/* Bottom: Move to Stage Dropdown */}
-        <div className="pt-2 border-t border-white/[0.06]">
-          <div className="relative">
-            <select
-              value={currentSlug}
-              disabled={isReadOnly}
-              onChange={(e) => handleChangeStage(task.id, e.target.value as TaskStage)}
-              aria-label="Move task to another status stage"
-              className={`w-full text-[11px] font-medium px-2.5 py-1.5 rounded-lg border appearance-none pr-6 outline-none transition cursor-pointer bg-[#07090e] border-white/[0.08] text-slate-300 hover:border-white/[0.2] ${
-                isReadOnly ? "cursor-not-allowed opacity-75" : ""
-              }`}
-            >
-              {projectStages.map((stg) => {
-                const s = stg.slug || stg.id;
-                const c = getStageConfig(s);
-                return (
-                  <option key={s} value={s} className="bg-[#0d1017] text-slate-100">
-                    Stage: {c.label}
-                  </option>
-                );
-              })}
-            </select>
-            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-400">
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
 
   // Render individual task as a clean tabular table row
   const renderTaskTableRow = (task: TaskItem) => {
@@ -2519,67 +2306,6 @@ export function TaskNotepad({
 
         {/* TOP ACTION BUTTONS */}
         <div className="flex items-center flex-wrap gap-2">
-          {/* View Mode Toggle: Board (by Stage) / List / Notepad */}
-          <div className="bg-[#07090e] p-0.5 rounded-lg border border-white/[0.07] flex items-center">
-            <button
-              type="button"
-              onClick={() => handleSwitchMode("board")}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition flex items-center gap-1.5 cursor-pointer ${
-                viewMode === "board"
-                  ? "bg-white/[0.12] text-white shadow-xs"
-                  : "text-slate-400 hover:text-white"
-              }`}
-              title="Separate Stage Columns"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"
-                />
-              </svg>
-              <span>By Stage</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleSwitchMode("list")}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition flex items-center gap-1.5 cursor-pointer ${
-                viewMode === "list"
-                  ? "bg-white/[0.12] text-white shadow-xs"
-                  : "text-slate-400 hover:text-white"
-              }`}
-              title="Structured Stage List"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-              <span>List</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleSwitchMode("notepad")}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition flex items-center gap-1.5 cursor-pointer ${
-                viewMode === "notepad"
-                  ? "bg-white/[0.12] text-white shadow-xs"
-                  : "text-slate-400 hover:text-white"
-              }`}
-              title="Raw Notepad / Markdown"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                />
-              </svg>
-              <span>Notepad</span>
-            </button>
-          </div>
-
           {/* Save Button */}
           {canEdit && (
             <button
@@ -2717,7 +2443,6 @@ export function TaskNotepad({
         {/* Total Tasks */}
         <div
           onClick={() => {
-            if (viewMode === "notepad") setViewMode("board");
             setFilterStage("all");
           }}
           className={`bg-[#07090e]/70 border rounded-xl p-3 flex flex-col justify-between transition cursor-pointer ${
@@ -2741,7 +2466,6 @@ export function TaskNotepad({
             <div
               key={slug}
               onClick={() => {
-                if (viewMode === "notepad") setViewMode("board");
                 setFilterStage((prev) => (prev === slug ? "all" : slug));
               }}
               className={`bg-[#07090e]/70 border rounded-xl p-3 flex flex-col justify-between transition cursor-pointer ${
@@ -2764,274 +2488,156 @@ export function TaskNotepad({
         })}
       </div>
 
-      {/* NOTEPAD RAW VIEW - STRICTLY READ-ONLY */}
-      {viewMode === "notepad" ? (
-        <div className="flex-1 flex flex-col relative rounded-xl border border-white/[0.07] bg-[#07090e] shadow-inner overflow-hidden">
-          {/* Top Info Bar */}
-          <div className="px-4 py-2.5 bg-[#0d1017]/90 border-b border-white/[0.07] flex flex-wrap items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-500/10 text-amber-300 border border-amber-500/30 font-semibold text-[11px]">
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                </svg>
-                Read-Only
-              </span>
-              <span className="text-slate-400 text-xs hidden sm:inline">
-                Editing is disabled in notepad view to prevent accidental task formatting loss. Use &quot;+ Add Task&quot; or Edit in List view.
-              </span>
+      {/* LIST VIEW (STRUCTURED STAGES) */}
+      <div className="flex-1 flex flex-col space-y-6">
+        {/* TOP ACTION & SEARCH TOOLBAR */}
+        <div className="flex items-center gap-2.5 sm:gap-3 p-2.5 sm:p-3 bg-[#07090e] rounded-xl border border-white/[0.07]">
+          {/* Search Input */}
+          <div className="relative flex-1 min-w-0">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search tasks..."
+              className="w-full bg-[#0d1017] border border-white/[0.07] text-xs sm:text-sm text-white rounded-lg pl-8 sm:pl-9 pr-8 py-2 placeholder:text-slate-500 focus:outline-none focus:border-white/[0.22] transition"
+            />
+            <div className="absolute inset-y-0 left-0 pl-2.5 sm:pl-3 flex items-center pointer-events-none text-slate-500">
+              <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
+              </svg>
             </div>
-
-            <button
-              type="button"
-              onClick={handleCopy}
-              className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg transition border border-slate-700 cursor-pointer shadow-sm active:scale-95"
-            >
-              {copied ? (
-                <>
-                  <span className="text-emerald-400 font-bold">✓</span>
-                  <span className="text-emerald-300">Copied!</span>
-                </>
-              ) : (
-                <>
-                  <svg className="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                    />
-                  </svg>
-                  <span>Copy Markdown</span>
-                </>
-              )}
-            </button>
-          </div>
-
-          <textarea
-            readOnly={true}
-            value={tasksToMarkdown(tasks)}
-            placeholder="No tasks to display in notepad view."
-            className="w-full flex-1 min-h-[460px] p-5 sm:p-6 bg-[#07090e]/70 text-slate-200 placeholder:text-slate-600 font-mono text-sm leading-relaxed outline-none resize-none cursor-default select-text"
-            spellCheck={false}
-          />
-        </div>
-      ) : (
-        /* LIST / GROUPED VIEWS */
-        <div className="flex-1 flex flex-col space-y-4">
-          {/* TOP ACTION & SEARCH TOOLBAR */}
-          <div className="flex items-center gap-2.5 sm:gap-3 p-2.5 sm:p-3 bg-[#07090e] rounded-xl border border-white/[0.07]">
-            {/* Wider Search Input */}
-            <div className="relative flex-1 min-w-0">
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search tasks..."
-                className="w-full bg-[#0d1017] border border-white/[0.07] text-xs sm:text-sm text-white rounded-lg pl-8 sm:pl-9 pr-8 py-2 placeholder:text-slate-500 focus:outline-none focus:border-white/[0.22] transition"
-              />
-              <div className="absolute inset-y-0 left-0 pl-2.5 sm:pl-3 flex items-center pointer-events-none text-slate-500">
-                <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                  />
-                </svg>
-              </div>
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery("")}
-                  className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-500 hover:text-white transition cursor-pointer"
-                  title="Clear search"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              )}
-            </div>
-
-            {/* Add Button that opens the Form */}
-            {canEdit && (
+            {searchQuery && (
               <button
                 type="button"
-                onClick={() => openCreateForm()}
-                className="flex items-center gap-1.5 px-4 py-2 text-xs sm:text-sm font-semibold bg-white hover:bg-slate-200 !text-slate-950 text-white rounded-lg transition shadow-sm cursor-pointer active:scale-95 flex-shrink-0"
+                onClick={() => setSearchQuery("")}
+                className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-500 hover:text-white transition cursor-pointer"
+                title="Clear search"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
-                <span>Add</span>
               </button>
             )}
           </div>
 
-          {/* VIEW RENDERER */}
-          {viewMode === "list" ? (
-            /* STRUCTURED LIST BY STAGE VIEW */
-            <div className="space-y-4">
-              {displayedStages.map((stgItem) => {
-                const slug = stgItem.slug || stgItem.id;
-                const stageTasks = filteredTasks.filter(
-                  (t) => getTaskStageSlug(t.stage, projectStages) === slug
-                );
-                const cfg = getStageConfig(slug);
-
-                return (
-                  <div
-                    key={slug}
-                    className="bg-[#07090e]/70 rounded-2xl border border-white/[0.07] overflow-hidden"
-                  >
-                    <div className="flex items-center justify-between px-4 py-3 bg-white/[0.02] border-b border-white/[0.06]">
-                      <div className="flex items-center gap-2">
-                        <span className={`w-2 h-2 rounded-full ${cfg.dotClass}`} />
-                        <h3 className="text-xs sm:text-sm font-semibold text-white">
-                          {cfg.label}
-                        </h3>
-                        <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-white/[0.05] text-slate-400 border border-white/[0.06]">
-                          {stageTasks.length}
-                        </span>
-                      </div>
-                      {canEdit && (
-                        <button
-                          type="button"
-                          onClick={() => openCreateForm(slug)}
-                          className="text-xs text-slate-300 hover:text-white transition cursor-pointer font-medium"
-                        >
-                          + Add to {cfg.label}
-                        </button>
-                      )}
-                    </div>
-
-                    {stageTasks.length === 0 ? (
-                      <p className="text-xs text-slate-500 italic p-4 text-center">
-                        No tasks currently in {cfg.label.toLowerCase()}.
-                      </p>
-                    ) : (
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse">
-                          <thead>
-                            <tr className="border-b border-white/[0.06] bg-[#07090e]/50 text-[10px] font-semibold text-slate-400 uppercase tracking-wider select-none">
-                              <th className="py-2.5 px-3 w-12 text-center">Status</th>
-                              <th className="py-2.5 px-3 min-w-[200px]">Task Heading</th>
-                              <th className="py-2.5 px-3 w-28 text-center">Comments</th>
-                              <th className="py-2.5 px-3 w-44 text-center">Dates</th>
-                              <th className="py-2.5 px-3 w-36 text-center">Move Stage</th>
-                              <th className="py-2.5 px-3 w-28 text-right">Actions</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-white/[0.06] text-xs">
-                            {stageTasks.map((task) => renderTaskTableRow(task))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            /* BOARD VIEW - SEPARATE STAGE COLUMNS */
-            <div className="space-y-3">
-              {filterStage !== "all" && (
-                <div className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-white/[0.03] border border-white/[0.07] text-xs">
-                  <div className="flex items-center gap-2">
-                    <span className="text-slate-400">Filtering stage:</span>
-                    <span className="font-semibold text-white px-2 py-0.5 rounded-md bg-white/[0.06] border border-white/[0.08]">
-                      {getStageConfig(filterStage).label}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setFilterStage("all")}
-                    className="text-xs text-slate-300 hover:text-white underline cursor-pointer"
-                  >
-                    View All Stages ({totalCount} tasks)
-                  </button>
-                </div>
-              )}
-
-              <div
-                className={`grid gap-4 items-start ${
-                  displayedStages.length === 1
-                    ? "grid-cols-1"
-                    : displayedStages.length === 2
-                    ? "grid-cols-1 md:grid-cols-2"
-                    : displayedStages.length === 3
-                    ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3"
-                    : displayedStages.length === 4
-                    ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-4"
-                    : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5"
-                }`}
-              >
-                {displayedStages.map((stgItem) => {
-                  const slug = stgItem.slug || stgItem.id;
-                  const stageTasks = filteredTasks.filter(
-                    (t) => getTaskStageSlug(t.stage, projectStages) === slug
-                  );
-                  const cfg = getStageConfig(slug);
-
-                  return (
-                    <div
-                      key={slug}
-                      className="bg-[#07090e]/80 border border-white/[0.08] rounded-2xl p-3.5 flex flex-col min-h-[400px] transition"
-                    >
-                      {/* Column Stage Header */}
-                      <div className="flex items-center justify-between pb-3 border-b border-white/[0.06] mb-3">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${cfg.dotClass}`} />
-                          <h3 className="font-semibold text-white text-xs sm:text-sm truncate">
-                            {cfg.label}
-                          </h3>
-                          <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-white/[0.05] text-slate-400 border border-white/[0.06]">
-                            {stageTasks.length}
-                          </span>
-                        </div>
-
-                        {canEdit && (
-                          <button
-                            type="button"
-                            onClick={() => openCreateForm(slug)}
-                            title={`Add task to ${cfg.label}`}
-                            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition cursor-pointer"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M12 4v16m8-8H4" />
-                            </svg>
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Column Stage Cards List */}
-                      <div className="space-y-2.5 flex-1 overflow-y-auto">
-                        {stageTasks.length === 0 ? (
-                          <div
-                            onClick={() => canEdit && openCreateForm(slug)}
-                            className="py-12 px-3 text-center rounded-xl border border-dashed border-white/[0.06] text-slate-500 hover:text-slate-400 hover:border-white/[0.14] transition cursor-pointer flex flex-col items-center justify-center gap-2"
-                          >
-                            <span className="text-xs">No tasks in {cfg.label}</span>
-                            {canEdit && (
-                              <span className="text-[11px] px-2.5 py-1 rounded-lg bg-white/[0.04] text-slate-300 font-medium">
-                                + Add Task
-                              </span>
-                            )}
-                          </div>
-                        ) : (
-                          stageTasks.map((task) => renderStageTaskCard(task))
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+          {/* Quick Add Task Button */}
+          {canEdit && (
+            <button
+              type="button"
+              onClick={() => openCreateForm()}
+              className="flex items-center gap-1.5 px-4 py-2 text-xs sm:text-sm font-semibold bg-white hover:bg-slate-200 !text-slate-950 rounded-lg transition shadow-sm cursor-pointer active:scale-95 flex-shrink-0"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+              </svg>
+              <span>Add Task</span>
+            </button>
           )}
         </div>
-      )}
 
-      {/* FOOTER / STATUS BAR */}
+        {/* Filter stage alert if filtering */}
+        {filterStage !== "all" && (
+          <div className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.07] text-xs">
+            <div className="flex items-center gap-2">
+              <span className="text-slate-400">Filtering stage:</span>
+              <span className="font-semibold text-white px-2.5 py-0.5 rounded-md bg-white/[0.06] border border-white/[0.08]">
+                {getStageConfig(filterStage).label}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setFilterStage("all")}
+              className="text-xs text-slate-300 hover:text-white underline cursor-pointer"
+            >
+              View All Stages ({totalCount} tasks)
+            </button>
+          </div>
+        )}
+
+        {/* STRUCTURED LIST BY STAGE VIEW - WITH GENEROUS VERTICAL GAP BETWEEN STAGES */}
+        <div className="space-y-8 sm:space-y-10 pb-6">
+          {displayedStages.map((stgItem) => {
+            const slug = stgItem.slug || stgItem.id;
+            const stageTasks = filteredTasks.filter(
+              (t) => getTaskStageSlug(t.stage, projectStages) === slug
+            );
+            const cfg = getStageConfig(slug);
+
+            return (
+              <div
+                key={slug}
+                className="bg-[#07090e]/80 rounded-2xl border border-white/[0.08] shadow-sm overflow-hidden transition"
+              >
+                {/* Stage Header */}
+                <div className="flex items-center justify-between px-5 py-3.5 bg-white/[0.025] border-b border-white/[0.07]">
+                  <div className="flex items-center gap-2.5">
+                    <span className={`w-2.5 h-2.5 rounded-full ${cfg.dotClass}`} />
+                    <h3 className="text-xs sm:text-sm font-semibold text-white tracking-wide">
+                      {cfg.label}
+                    </h3>
+                    <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-white/[0.05] text-slate-400 border border-white/[0.06]">
+                      {stageTasks.length} {stageTasks.length === 1 ? "task" : "tasks"}
+                    </span>
+                  </div>
+                  {canEdit && (
+                    <button
+                      type="button"
+                      onClick={() => openCreateForm(slug)}
+                      className="text-xs text-slate-300 hover:text-white transition cursor-pointer font-medium flex items-center gap-1.5 hover:bg-white/[0.05] px-2.5 py-1 rounded-lg"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      <span>Add to {cfg.label}</span>
+                    </button>
+                  )}
+                </div>
+
+                {stageTasks.length === 0 ? (
+                  <div className="py-8 px-4 text-center">
+                    <p className="text-xs text-slate-500 italic">
+                      No tasks currently in {cfg.label.toLowerCase()}.
+                    </p>
+                    {canEdit && (
+                      <button
+                        type="button"
+                        onClick={() => openCreateForm(slug)}
+                        className="mt-2 text-xs text-slate-400 hover:text-white underline cursor-pointer inline-block"
+                      >
+                        + Add task to {cfg.label}
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-white/[0.06] bg-[#07090e]/60 text-[10px] font-semibold text-slate-400 uppercase tracking-wider select-none">
+                          <th className="py-2.5 px-3.5 w-12 text-center">Status</th>
+                          <th className="py-2.5 px-3.5 min-w-[200px]">Task Heading</th>
+                          <th className="py-2.5 px-3.5 w-28 text-center">Comments</th>
+                          <th className="py-2.5 px-3.5 w-44 text-center">Dates</th>
+                          <th className="py-2.5 px-3.5 w-36 text-center">Move Stage</th>
+                          <th className="py-2.5 px-3.5 w-28 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/[0.06] text-xs">
+                        {stageTasks.map((task) => renderTaskTableRow(task))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+{/* FOOTER / STATUS BAR */}
       <div className="pt-4 border-t border-white/[0.07] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-slate-400">
         <div className="flex items-center flex-wrap gap-2.5">
           <span>
