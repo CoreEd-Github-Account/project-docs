@@ -80,6 +80,51 @@ const STAGE_CONFIG: Record<
   },
 };
 
+// Helper: match any task stage value (slug, id, label, or alias) to project status stages
+export function getTaskStageSlug(
+  taskStage: string | undefined,
+  stages: ProjectStatusStage[]
+): string {
+  if (!stages || stages.length === 0) return "inprogress";
+  if (!taskStage) return stages[0].slug || stages[0].id || "inprogress";
+
+  const ts = taskStage.trim().toLowerCase();
+  const matched = stages.find((s) => {
+    const slug = (s.slug || "").trim().toLowerCase();
+    const id = (s.id || "").trim().toLowerCase();
+    const name = (s.name || "").trim().toLowerCase();
+    const label = (s.label || "").trim().toLowerCase();
+    return ts === slug || ts === id || ts === name || ts === label;
+  });
+  if (matched) return matched.slug || matched.id;
+
+  // Common aliases
+  if (ts === "done" || ts === "finished" || ts === "completed") {
+    const doneStg = stages.find((s) => {
+      const str = (s.slug || s.id || s.name || s.label || "").toLowerCase();
+      return str.includes("done") || str.includes("complete") || str.includes("finish");
+    });
+    if (doneStg) return doneStg.slug || doneStg.id;
+  }
+  if (ts === "inprogress" || ts === "in progress" || ts === "in-progress" || ts === "active" || ts === "doing") {
+    const progStg = stages.find((s) => {
+      const str = (s.slug || s.id || s.name || s.label || "").toLowerCase();
+      return str.includes("prog") || str.includes("doing") || str.includes("active");
+    });
+    if (progStg) return progStg.slug || progStg.id;
+  }
+  if (ts === "stopped" || ts === "blocked" || ts === "paused" || ts === "hold") {
+    const stopStg = stages.find((s) => {
+      const str = (s.slug || s.id || s.name || s.label || "").toLowerCase();
+      return str.includes("stop") || str.includes("block") || str.includes("hold");
+    });
+    if (stopStg) return stopStg.slug || stopStg.id;
+  }
+
+  return stages[0].slug || stages[0].id || "inprogress";
+}
+
+
 // Helper: format human-friendly full date and time string: e.g. "Oct 17, 2026, 3:36 PM"
 export function formatFullDateTime(timestamp: number): string {
   if (!timestamp) return "";
@@ -476,11 +521,7 @@ export function TaskNotepad({
           : isStopped
           ? "bg-white/[0.03] text-slate-400 border-white/[0.08]"
           : "bg-white/[0.05] text-slate-200 border-white/[0.12]",
-        dotClass: isDone
-          ? "bg-white"
-          : isStopped
-          ? "bg-slate-500"
-          : "bg-slate-300",
+        dotClass: base.styles?.dotClass || (isDone ? "bg-white" : isStopped ? "bg-slate-500" : "bg-slate-300"),
         borderClass: "border-white/[0.22]",
         bgHoverClass: "hover:border-white/[0.14]",
         ringClass: "ring-white/[0.15] border-white/[0.25]",
@@ -695,7 +736,7 @@ export function TaskNotepad({
   const chatMessagesEndRef = useRef<HTMLDivElement | null>(null);
 
   // View state: 'list' (default) | 'grouped' | 'notepad'
-  const [viewMode, setViewMode] = useState<"list" | "grouped" | "notepad">("list");
+  const [viewMode, setViewMode] = useState<"board" | "list" | "notepad">("board");
   // Active stage filter in list view: 'all' | TaskStage
   const [filterStage, setFilterStage] = useState<"all" | TaskStage>("all");
   // Search query
@@ -1789,8 +1830,9 @@ export function TaskNotepad({
     const task = tasks.find((t) => t.id === id);
     if (!task) return;
     const doneStage = projectStages.find((s) => s.slug === "completed" || s.slug === "done" || s.slug === "finished")?.slug || projectStages[projectStages.length - 1]?.slug || "completed";
-    const firstStage = projectStages[0]?.slug || "inprogress";
-    const nextStage: TaskStage = task.stage === doneStage ? firstStage : doneStage;
+    const firstStage = projectStages[0]?.slug || projectStages[0]?.id || "inprogress";
+    const currentSlug = getTaskStageSlug(task.stage, projectStages);
+    const nextStage: TaskStage = currentSlug === doneStage ? firstStage : doneStage;
     const updated = tasks.map((t) => (t.id === id ? { ...t, stage: nextStage } : t));
     commitTasks(updated);
 
@@ -1827,7 +1869,7 @@ export function TaskNotepad({
     commitTasks(updated);
 
     try {
-      await fetch("/api/tasks", {
+      const res = await fetch("/api/tasks", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1841,10 +1883,16 @@ export function TaskNotepad({
           startDate: task.startDate || "",
           endDate: task.endDate || "",
           createdAt: task.createdAt,
+          folder: task.folder || "",
+          attachments: task.attachments || [],
+          voiceNote: task.voiceNote || null,
         }),
       });
-      setDbNotice("Status synced with database");
-      setTimeout(() => setDbNotice(null), 2500);
+      if (res.ok) {
+        const targetStg = projectStages.find((s) => (s.slug || s.id) === stage);
+        setDbNotice(`Moved to "${targetStg?.label || targetStg?.name || stage}" & synced`);
+        setTimeout(() => setDbNotice(null), 2500);
+      }
     } catch (err) {
       console.error("Failed to update task stage in database:", err);
     }
@@ -1915,7 +1963,7 @@ export function TaskNotepad({
   };
 
   // Switch between List, Grouped, and Read-Only Notepad mode
-  const handleSwitchMode = (mode: "list" | "grouped" | "notepad") => {
+  const handleSwitchMode = (mode: "board" | "list" | "notepad") => {
     setViewMode(mode);
   };
 
@@ -1933,7 +1981,7 @@ export function TaskNotepad({
   const stageMetrics = React.useMemo(() => {
     return projectStages.map((stg) => {
       const slug = stg.slug || stg.id;
-      const count = tasks.filter((t) => t.stage === slug).length;
+      const count = tasks.filter((t) => getTaskStageSlug(t.stage, projectStages) === slug).length;
       const pct = totalCount > 0 ? Math.round((count / totalCount) * 100) : 0;
       const cfg = getStageConfig(slug);
       return {
@@ -1958,7 +2006,7 @@ export function TaskNotepad({
     }
 
     // 2. Stage filtering
-    const matchesFilter = filterStage === "all" || t.stage === filterStage;
+    const matchesFilter = filterStage === "all" || getTaskStageSlug(t.stage, projectStages) === filterStage;
 
     // 3. Search filtering
     const query = searchQuery.toLowerCase().trim();
@@ -1974,6 +2022,220 @@ export function TaskNotepad({
 
   // Active task for right-side slide-over details modal
   const activeDetailTask = tasks.find((t) => t.id === activeDetailTaskId);
+
+
+  const displayedStages = React.useMemo(() => {
+    if (filterStage === "all") return projectStages;
+    const match = projectStages.filter((s) => (s.slug || s.id) === filterStage);
+    return match.length > 0 ? match : projectStages;
+  }, [projectStages, filterStage]);
+
+  // Render individual task as a stage card for board/column view
+  const renderStageTaskCard = (task: TaskItem) => {
+    const currentSlug = getTaskStageSlug(task.stage, projectStages);
+    const cfg = getStageConfig(currentSlug);
+    const taskHeading = task.heading || task.title;
+    const taskComments = parseComments(task.comments);
+    const hasComments = taskComments.length > 0;
+    const hasTimeline = Boolean(task.startDate || task.endDate);
+
+    const doneStage = projectStages.find((s) => s.slug === "completed" || s.slug === "done" || s.slug === "finished")?.slug || projectStages[projectStages.length - 1]?.slug || "completed";
+    const isTaskDone = currentSlug === doneStage || currentSlug === "completed" || currentSlug === "done";
+
+    return (
+      <div
+        key={task.id}
+        className="group bg-[#0d1017] hover:bg-[#11141e] border border-white/[0.08] hover:border-white/[0.16] rounded-xl p-3.5 space-y-2.5 transition shadow-xs"
+      >
+        {/* Header: Checkbox + Title + Actions */}
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-start gap-2.5 min-w-0 flex-1">
+            <button
+              type="button"
+              disabled={isReadOnly}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!isReadOnly) handleToggleCheck(task.id);
+              }}
+              className={`w-4 h-4 rounded mt-0.5 border flex items-center justify-center transition-all shrink-0 ${
+                isReadOnly ? "cursor-not-allowed opacity-60" : "cursor-pointer active:scale-95"
+              } ${
+                isTaskDone
+                  ? "bg-white border-white text-slate-950"
+                  : "border-white/[0.2] bg-white/[0.03] hover:border-white/50 text-transparent"
+              }`}
+              title={isTaskDone ? "Mark as in progress" : "Mark as done"}
+            >
+              <svg className={`w-3 h-3 ${isTaskDone ? "scale-100" : "scale-0"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+              </svg>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveDetailTaskId(task.id)}
+              className="text-left font-semibold hover:text-white transition-colors cursor-pointer min-w-0 flex-1 group/title"
+              title="Click to view task details"
+            >
+              <span
+                className={`text-xs sm:text-sm font-semibold break-words leading-snug line-clamp-2 transition-colors ${
+                  isTaskDone
+                    ? "line-through text-slate-500"
+                    : "text-slate-100 group-hover/title:text-white"
+                }`}
+              >
+                {taskHeading}
+              </span>
+            </button>
+          </div>
+
+          <div className="flex items-center gap-0.5 opacity-60 group-hover:opacity-100 transition shrink-0">
+            <button
+              type="button"
+              onClick={() => setActiveDetailTaskId(task.id)}
+              className="p-1 text-slate-400 hover:text-white rounded hover:bg-white/[0.06] transition cursor-pointer"
+              title="View details"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+              </svg>
+            </button>
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() => openEditForm(task)}
+                className="p-1 text-slate-400 hover:text-white rounded hover:bg-white/[0.06] transition cursor-pointer"
+                title="Edit task"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+              </button>
+            )}
+            {canDelete && (
+              <button
+                type="button"
+                onClick={() => handleDeleteTask(task.id)}
+                className="p-1 text-slate-500 hover:text-rose-400 rounded hover:bg-rose-500/10 transition cursor-pointer"
+                title="Delete task"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Description snippet if present */}
+        {task.description && (
+          <p
+            onClick={() => setActiveDetailTaskId(task.id)}
+            className="text-[11px] text-slate-400 line-clamp-2 leading-relaxed cursor-pointer hover:text-slate-300"
+          >
+            {task.description}
+          </p>
+        )}
+
+        {/* Metadata Chips: Folder, Attachments, Comments, Timeline */}
+        <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+          {task.folder && (
+            <span
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveFolder(task.folder!);
+              }}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-white/[0.04] border border-white/[0.08] text-slate-300 hover:bg-white/[0.08] cursor-pointer transition shrink-0"
+              title={`Folder: ${task.folder}`}
+            >
+              📁 {task.folder}
+            </span>
+          )}
+
+          {task.attachments && task.attachments.length > 0 && (
+            <span
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveDetailTaskId(task.id);
+              }}
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-white/[0.04] border border-white/[0.08] text-slate-300 hover:bg-white/[0.08] cursor-pointer transition shrink-0"
+              title={`${task.attachments.length} attachment(s)`}
+            >
+              <span>🖼️ {task.attachments.length}</span>
+            </span>
+          )}
+
+          {task.voiceNote && (
+            <span
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveDetailTaskId(task.id);
+              }}
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-white/[0.04] border border-white/[0.08] text-slate-300 hover:bg-white/[0.08] cursor-pointer transition shrink-0"
+              title="Voice note available"
+            >
+              <span>🎙️ Voice</span>
+            </span>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setActiveDetailTaskId(task.id)}
+            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium transition cursor-pointer ${
+              hasComments
+                ? "bg-white/[0.06] text-slate-200 border border-white/[0.1] hover:bg-white/[0.1]"
+                : "text-slate-500 hover:text-slate-400 border border-transparent"
+            }`}
+            title={`${taskComments.length} comment(s)`}
+          >
+            <svg className="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
+            <span>{taskComments.length}</span>
+          </button>
+
+          {hasTimeline && (
+            <span className="inline-flex items-center gap-1 text-[10px] text-slate-400 font-mono ml-auto">
+              {task.startDate ? task.startDate.split("-").slice(1).join("/") : "—"}
+              {" → "}
+              {task.endDate ? task.endDate.split("-").slice(1).join("/") : "—"}
+            </span>
+          )}
+        </div>
+
+        {/* Bottom: Move to Stage Dropdown */}
+        <div className="pt-2 border-t border-white/[0.06]">
+          <div className="relative">
+            <select
+              value={currentSlug}
+              disabled={isReadOnly}
+              onChange={(e) => handleChangeStage(task.id, e.target.value as TaskStage)}
+              aria-label="Move task to another status stage"
+              className={`w-full text-[11px] font-medium px-2.5 py-1.5 rounded-lg border appearance-none pr-6 outline-none transition cursor-pointer bg-[#07090e] border-white/[0.08] text-slate-300 hover:border-white/[0.2] ${
+                isReadOnly ? "cursor-not-allowed opacity-75" : ""
+              }`}
+            >
+              {projectStages.map((stg) => {
+                const s = stg.slug || stg.id;
+                const c = getStageConfig(s);
+                return (
+                  <option key={s} value={s} className="bg-[#0d1017] text-slate-100">
+                    Stage: {c.label}
+                  </option>
+                );
+              })}
+            </select>
+            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-400">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   // Render individual task as a clean tabular table row
   const renderTaskTableRow = (task: TaskItem) => {
@@ -2137,7 +2399,7 @@ export function TaskNotepad({
         <td className="py-3 px-3 w-36 text-center align-middle">
           <div className="relative inline-block">
             <select
-              value={task.stage}
+              value={getTaskStageSlug(task.stage, projectStages)}
               disabled={isReadOnly}
               onChange={(e) => handleChangeStage(task.id, e.target.value as TaskStage)}
               aria-label="Change task status"
@@ -2257,33 +2519,17 @@ export function TaskNotepad({
 
         {/* TOP ACTION BUTTONS */}
         <div className="flex items-center flex-wrap gap-2">
-          {/* View Mode Toggle: List / Grouped / Notepad */}
+          {/* View Mode Toggle: Board (by Stage) / List / Notepad */}
           <div className="bg-[#07090e] p-0.5 rounded-lg border border-white/[0.07] flex items-center">
             <button
               type="button"
-              onClick={() => handleSwitchMode("list")}
+              onClick={() => handleSwitchMode("board")}
               className={`px-3 py-1.5 text-xs font-semibold rounded-md transition flex items-center gap-1.5 cursor-pointer ${
-                viewMode === "list"
-                  ? "bg-white/[0.12] text-white"
+                viewMode === "board"
+                  ? "bg-white/[0.12] text-white shadow-xs"
                   : "text-slate-400 hover:text-white"
               }`}
-              title="List View"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-              <span>List</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleSwitchMode("grouped")}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition flex items-center gap-1.5 cursor-pointer ${
-                viewMode === "grouped"
-                  ? "bg-white/[0.12] text-white"
-                  : "text-slate-400 hover:text-white"
-              }`}
-              title="Grouped by Stage"
+              title="Separate Stage Columns"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
@@ -2298,10 +2544,26 @@ export function TaskNotepad({
 
             <button
               type="button"
+              onClick={() => handleSwitchMode("list")}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition flex items-center gap-1.5 cursor-pointer ${
+                viewMode === "list"
+                  ? "bg-white/[0.12] text-white shadow-xs"
+                  : "text-slate-400 hover:text-white"
+              }`}
+              title="Structured Stage List"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+              <span>List</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => handleSwitchMode("notepad")}
               className={`px-3 py-1.5 text-xs font-semibold rounded-md transition flex items-center gap-1.5 cursor-pointer ${
                 viewMode === "notepad"
-                  ? "bg-white/[0.12] text-white"
+                  ? "bg-white/[0.12] text-white shadow-xs"
                   : "text-slate-400 hover:text-white"
               }`}
               title="Raw Notepad / Markdown"
@@ -2450,20 +2712,20 @@ export function TaskNotepad({
         )}
       </div>
 
-      {/* METRICS & PROGRESS BAR */}
+      {/* METRICS & STAGE NAVIGATION */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
         {/* Total Tasks */}
         <div
           onClick={() => {
-            if (viewMode === "notepad") setViewMode("list");
+            if (viewMode === "notepad") setViewMode("board");
             setFilterStage("all");
           }}
           className={`bg-[#07090e]/70 border rounded-xl p-3 flex flex-col justify-between transition cursor-pointer ${
-            filterStage === "all" && viewMode === "list"
-              ? "border-white/[0.25] bg-white/[0.04]"
+            filterStage === "all"
+              ? "border-white/[0.25] bg-white/[0.04] ring-1 ring-white/10"
               : "border-white/[0.07] hover:border-slate-700"
           }`}
-          title="Show All Tasks"
+          title="Show All Stages"
         >
           <span className="text-xs font-medium text-slate-400">Total Tasks</span>
           <div className="flex items-baseline justify-between mt-1">
@@ -2474,20 +2736,20 @@ export function TaskNotepad({
 
         {/* Dynamic Project Stage Cards */}
         {stageMetrics.map(({ stage, slug, count, pct, cfg }) => {
-          const isFilterActive = filterStage === slug && viewMode === "list";
+          const isFilterActive = filterStage === slug;
           return (
             <div
               key={slug}
               onClick={() => {
-                if (viewMode === "notepad") setViewMode("list");
+                if (viewMode === "notepad") setViewMode("board");
                 setFilterStage((prev) => (prev === slug ? "all" : slug));
               }}
               className={`bg-[#07090e]/70 border rounded-xl p-3 flex flex-col justify-between transition cursor-pointer ${
                 isFilterActive
-                  ? `${cfg.borderClass} ${cfg.ringClass} ring-1`
+                  ? "border-white/[0.3] bg-white/[0.06] ring-1 ring-white/20"
                   : `border-white/[0.07] ${cfg.bgHoverClass}`
               }`}
-              title={isFilterActive ? "Clear filter (Show all)" : `Filter by ${cfg.label}`}
+              title={isFilterActive ? "Clear filter (Show all stages)" : `Filter by ${cfg.label}`}
             >
               <div className="flex items-center gap-1.5">
                 <span className={`w-2 h-2 rounded-full ${cfg.dotClass}`} />
@@ -2608,129 +2870,162 @@ export function TaskNotepad({
 
           {/* VIEW RENDERER */}
           {viewMode === "list" ? (
-            /* TABULAR LIST VIEW */
-            <div>
-              {filteredTasks.length === 0 ? (
-                <div className="py-12 px-4 text-center rounded-xl border border-dashed border-white/[0.07] bg-[#07090e]/40 text-slate-400 space-y-3">
-                  <div className="w-12 h-12 rounded-full bg-[#0d1017] border border-white/[0.07] flex items-center justify-center mx-auto text-slate-500">
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={1.5}
-                        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
-                      />
-                    </svg>
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-slate-200">
-                      {searchQuery
-                        ? "No tasks match your search."
-                        : filterStage === "all"
-                        ? "No tasks added yet."
-                        : `No ${getStageConfig(filterStage).label.toLowerCase()} tasks.`}
-                    </p>
-                    <p className="text-xs text-slate-500 mt-1">
-                      Click the &quot;Add&quot; button to open the form and add your first task.
-                    </p>
-                  </div>
-                  {canEdit && (
-                    <button
-                      type="button"
-                      onClick={() => openCreateForm()}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold bg-white hover:bg-slate-200 !text-slate-950 text-white rounded-lg transition shadow-sm cursor-pointer"
-                    >
-                      <span>+ Add Task</span>
-                    </button>
-                  )}
-                </div>
-              ) : (
-                <div className="overflow-hidden rounded-xl border border-white/[0.07] bg-[#07090e]/40 shadow-sm">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="border-b border-white/[0.07] bg-[#07090e]/90 text-[11px] font-semibold text-slate-400 uppercase tracking-wider select-none">
-                          <th className="py-3 px-3.5 w-12 text-center">Status</th>
-                          <th className="py-3 px-3 min-w-[200px]">Task Heading</th>
-                          <th className="py-3 px-3 w-28 text-center">Comments</th>
-                          <th className="py-3 px-3 w-44 text-center">Dates</th>
-                          <th className="py-3 px-3 w-36 text-center">Stage</th>
-                          <th className="py-3 px-3 w-28 text-right">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-white/[0.06] text-xs">
-                        {filteredTasks.map((task) => renderTaskTableRow(task))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : (
-            /* GROUPED BY STAGE VIEW */
-            <div className="space-y-6">
-              {projectStages.map((stgItem) => {
-                const stg = stgItem.slug || stgItem.id;
-                const stageTasks = filteredTasks.filter((t) => t.stage === stg);
-                const cfg = getStageConfig(stg);
+            /* STRUCTURED LIST BY STAGE VIEW */
+            <div className="space-y-4">
+              {displayedStages.map((stgItem) => {
+                const slug = stgItem.slug || stgItem.id;
+                const stageTasks = filteredTasks.filter(
+                  (t) => getTaskStageSlug(t.stage, projectStages) === slug
+                );
+                const cfg = getStageConfig(slug);
 
                 return (
                   <div
-                    key={stg}
-                    className="bg-[#07090e]/60 rounded-xl border border-white/[0.07]/80 p-4 space-y-3"
+                    key={slug}
+                    className="bg-[#07090e]/70 rounded-2xl border border-white/[0.07] overflow-hidden"
                   >
-                    {/* Stage Header */}
-                    <div className="flex items-center justify-between border-b border-white/[0.07]/80 pb-2.5">
+                    <div className="flex items-center justify-between px-4 py-3 bg-white/[0.02] border-b border-white/[0.06]">
                       <div className="flex items-center gap-2">
                         <span className={`w-2 h-2 rounded-full ${cfg.dotClass}`} />
-                        <h3 className="text-sm font-bold text-white tracking-wide">
+                        <h3 className="text-xs sm:text-sm font-semibold text-white">
                           {cfg.label}
                         </h3>
-                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${cfg.badgeClass}`}>
+                        <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-white/[0.05] text-slate-400 border border-white/[0.06]">
                           {stageTasks.length}
                         </span>
                       </div>
-
                       {canEdit && (
                         <button
                           type="button"
-                          onClick={() => openCreateForm(stg)}
-                          className="text-xs text-slate-300 hover:text-white transition flex items-center gap-1 cursor-pointer font-medium"
+                          onClick={() => openCreateForm(slug)}
+                          className="text-xs text-slate-300 hover:text-white transition cursor-pointer font-medium"
                         >
-                          <span>+ Add to {cfg.label}</span>
+                          + Add to {cfg.label}
                         </button>
                       )}
                     </div>
 
-                    {/* Stage Tasks List */}
                     {stageTasks.length === 0 ? (
-                      <p className="text-xs text-slate-500 italic py-2">
-                        No tasks currently in {cfg.label.toLowerCase()}. Click &quot;+ Add to {cfg.label}&quot; to create one.
+                      <p className="text-xs text-slate-500 italic p-4 text-center">
+                        No tasks currently in {cfg.label.toLowerCase()}.
                       </p>
                     ) : (
-                      <div className="overflow-hidden rounded-xl border border-white/[0.07] bg-[#0d1017]/40">
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-left border-collapse">
-                            <thead>
-                              <tr className="border-b border-white/[0.07] bg-[#07090e]/70 text-[10px] font-semibold text-slate-400 uppercase tracking-wider select-none">
-                                <th className="py-2.5 px-3 w-12 text-center">Status</th>
-                                <th className="py-2.5 px-3 min-w-[200px]">Task Heading</th>
-                                <th className="py-2.5 px-3 w-28 text-center">Comments</th>
-                                <th className="py-2.5 px-3 w-44 text-center">Dates</th>
-                                <th className="py-2.5 px-3 w-36 text-center">Stage</th>
-                                <th className="py-2.5 px-3 w-28 text-right">Actions</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-white/[0.06] text-xs">
-                              {stageTasks.map((task) => renderTaskTableRow(task))}
-                            </tbody>
-                          </table>
-                        </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                          <thead>
+                            <tr className="border-b border-white/[0.06] bg-[#07090e]/50 text-[10px] font-semibold text-slate-400 uppercase tracking-wider select-none">
+                              <th className="py-2.5 px-3 w-12 text-center">Status</th>
+                              <th className="py-2.5 px-3 min-w-[200px]">Task Heading</th>
+                              <th className="py-2.5 px-3 w-28 text-center">Comments</th>
+                              <th className="py-2.5 px-3 w-44 text-center">Dates</th>
+                              <th className="py-2.5 px-3 w-36 text-center">Move Stage</th>
+                              <th className="py-2.5 px-3 w-28 text-right">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-white/[0.06] text-xs">
+                            {stageTasks.map((task) => renderTaskTableRow(task))}
+                          </tbody>
+                        </table>
                       </div>
                     )}
                   </div>
                 );
               })}
+            </div>
+          ) : (
+            /* BOARD VIEW - SEPARATE STAGE COLUMNS */
+            <div className="space-y-3">
+              {filterStage !== "all" && (
+                <div className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-white/[0.03] border border-white/[0.07] text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="text-slate-400">Filtering stage:</span>
+                    <span className="font-semibold text-white px-2 py-0.5 rounded-md bg-white/[0.06] border border-white/[0.08]">
+                      {getStageConfig(filterStage).label}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setFilterStage("all")}
+                    className="text-xs text-slate-300 hover:text-white underline cursor-pointer"
+                  >
+                    View All Stages ({totalCount} tasks)
+                  </button>
+                </div>
+              )}
+
+              <div
+                className={`grid gap-4 items-start ${
+                  displayedStages.length === 1
+                    ? "grid-cols-1"
+                    : displayedStages.length === 2
+                    ? "grid-cols-1 md:grid-cols-2"
+                    : displayedStages.length === 3
+                    ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3"
+                    : displayedStages.length === 4
+                    ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-4"
+                    : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5"
+                }`}
+              >
+                {displayedStages.map((stgItem) => {
+                  const slug = stgItem.slug || stgItem.id;
+                  const stageTasks = filteredTasks.filter(
+                    (t) => getTaskStageSlug(t.stage, projectStages) === slug
+                  );
+                  const cfg = getStageConfig(slug);
+
+                  return (
+                    <div
+                      key={slug}
+                      className="bg-[#07090e]/80 border border-white/[0.08] rounded-2xl p-3.5 flex flex-col min-h-[400px] transition"
+                    >
+                      {/* Column Stage Header */}
+                      <div className="flex items-center justify-between pb-3 border-b border-white/[0.06] mb-3">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${cfg.dotClass}`} />
+                          <h3 className="font-semibold text-white text-xs sm:text-sm truncate">
+                            {cfg.label}
+                          </h3>
+                          <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-white/[0.05] text-slate-400 border border-white/[0.06]">
+                            {stageTasks.length}
+                          </span>
+                        </div>
+
+                        {canEdit && (
+                          <button
+                            type="button"
+                            onClick={() => openCreateForm(slug)}
+                            title={`Add task to ${cfg.label}`}
+                            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition cursor-pointer"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M12 4v16m8-8H4" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Column Stage Cards List */}
+                      <div className="space-y-2.5 flex-1 overflow-y-auto">
+                        {stageTasks.length === 0 ? (
+                          <div
+                            onClick={() => canEdit && openCreateForm(slug)}
+                            className="py-12 px-3 text-center rounded-xl border border-dashed border-white/[0.06] text-slate-500 hover:text-slate-400 hover:border-white/[0.14] transition cursor-pointer flex flex-col items-center justify-center gap-2"
+                          >
+                            <span className="text-xs">No tasks in {cfg.label}</span>
+                            {canEdit && (
+                              <span className="text-[11px] px-2.5 py-1 rounded-lg bg-white/[0.04] text-slate-300 font-medium">
+                                + Add Task
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          stageTasks.map((task) => renderStageTaskCard(task))
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>
