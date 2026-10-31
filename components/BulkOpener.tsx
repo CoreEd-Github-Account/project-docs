@@ -19,6 +19,7 @@ export function BulkOpener({ project, userPermission }: BulkOpenerProps) {
   const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [isClearModalOpen, setIsClearModalOpen] = useState(false);
+  const [blockedUrls, setBlockedUrls] = useState<string[]>([]);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lineNumbersRef = useRef<HTMLDivElement>(null);
@@ -197,11 +198,23 @@ export function BulkOpener({ project, userPermission }: BulkOpenerProps) {
       if (!confirmOpen) return;
     }
 
-    detectedUrls.forEach((url, i) => {
-      setTimeout(() => {
-        window.open(url, "_blank", "noopener,noreferrer");
-      }, i * 150);
-    });
+    const blocked: string[] = [];
+
+    // Open all URLs synchronously within the user click gesture
+    for (const url of detectedUrls) {
+      const win = window.open(url, "_blank");
+      if (win) {
+        try {
+          win.opener = null;
+        } catch {
+          // ignore cross-origin opener assignment
+        }
+      } else {
+        blocked.push(url);
+      }
+    }
+
+    setBlockedUrls(blocked);
   };
 
   const handleCopy = () => {
@@ -332,6 +345,43 @@ export function BulkOpener({ project, userPermission }: BulkOpenerProps) {
             </button>
           </div>
         </div>
+
+        {/* Popup Blocker Notice (shown only if browser blocked 2nd+ tabs) */}
+        {blockedUrls.length > 0 && (
+          <div className="px-4 py-3 bg-[#10131c] border-b border-white/[0.08] flex flex-col gap-2 text-xs">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-slate-200 font-medium">
+                Browser blocked {blockedUrls.length} {blockedUrls.length === 1 ? "tab" : "tabs"} from opening at once.{" "}
+                <span className="text-slate-400 font-normal">
+                  Click the <strong className="text-white">Pop-up blocked</strong> icon on the right side of your address bar and select <strong className="text-white">&quot;Always allow pop-ups and redirects&quot;</strong>, then click <strong className="text-white">Open Links</strong> again.
+                </span>
+              </p>
+              <button
+                type="button"
+                onClick={() => setBlockedUrls([])}
+                className="text-slate-400 hover:text-white px-1.5 py-0.5 rounded cursor-pointer shrink-0"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {blockedUrls.map((url, idx) => (
+                <a
+                  key={`${url}-${idx}`}
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() =>
+                    setBlockedUrls((prev) => prev.filter((_, i) => i !== idx))
+                  }
+                  className="px-2.5 py-1 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.1] text-slate-200 hover:text-white font-mono text-[11px] truncate max-w-[260px] transition"
+                >
+                  ↗ {url}
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Editor Body with Line Numbers */}
         <div className="relative flex-1 flex bg-[#07090e] overflow-hidden min-h-[480px]">
