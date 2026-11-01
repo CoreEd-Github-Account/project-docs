@@ -1969,6 +1969,44 @@ export async function getPrompts(userId: string): Promise<SavedPrompt[]> {
   }));
 }
 
+export async function getPromptById(id: string): Promise<SavedPrompt | null> {
+  await ensurePromptsTableExists();
+  const pool = getPool();
+  const { rows } = await pool.query<{
+    id: string;
+    heading: string;
+    description: string | null;
+    prompt: string;
+    created_at: Date | string;
+    updated_at: Date | string | null;
+    user_id: string;
+  }>(
+    "SELECT id, heading, description, prompt, created_at, updated_at, user_id FROM prompts WHERE id = $1 LIMIT 1",
+    [id]
+  );
+
+  if (rows.length === 0) return null;
+  const row = rows[0];
+
+  return {
+    id: row.id,
+    heading: row.heading,
+    description: row.description || "",
+    prompt: row.prompt,
+    createdAt:
+      row.created_at instanceof Date
+        ? row.created_at.toISOString()
+        : String(row.created_at || new Date().toISOString()),
+    updatedAt:
+      row.updated_at instanceof Date
+        ? row.updated_at.toISOString()
+        : row.updated_at
+        ? String(row.updated_at)
+        : undefined,
+    userId: row.user_id,
+  };
+}
+
 export async function savePrompt(
   item: { id: string; heading: string; description?: string; prompt: string; createdAt?: string },
   userId: string
