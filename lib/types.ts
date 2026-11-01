@@ -306,3 +306,24 @@ export interface ImportantNote {
   updatedAt?: string;
   userId?: string;
 }
+
+export interface SavedSnippet {
+  id: string;
+  title: string;
+  description?: string;
+  content: string;
+  category: string;
+  isPinned?: boolean;
+  createdAt: string;
+  updatedAt?: string;
+  userId?: string;
+}
+
+export interface SnippetCategory {
+  id: string;
+  name: string;
+  icon?: string;
+  color?: string;
+  userId?: string;
+  createdAt?: string;
+}

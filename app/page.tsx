@@ -4,9 +4,8 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { LoginForm } from "@/components/LoginForm";
 import { NotificationBell } from "@/components/NotificationBell";
-import type { ImportantNote } from "@/lib/types";
 
-type AccentColor = "blue" | "indigo" | "amber" | "purple" | "emerald" | "teal";
+type AccentColor = "blue" | "indigo" | "amber" | "purple" | "emerald" | "teal" | "rose";
 
 const ACCENT_RGB: Record<AccentColor, string> = {
   blue: "59, 130, 246",
@@ -15,6 +14,7 @@ const ACCENT_RGB: Record<AccentColor, string> = {
   purple: "168, 85, 247",
   emerald: "16, 185, 129",
   teal: "20, 184, 166",
+  rose: "244, 63, 94",
 };
 
 interface WeatherData {
@@ -99,122 +99,6 @@ export default function HomePortal() {
   const isNotchExpanded = notchHovered || notchBellOpen;
 
   const [isWorkspaceAwake, setIsWorkspaceAwake] = useState(false);
-
-  // Important Notes State
-  const [importantNotes, setImportantNotes] = useState<ImportantNote[]>([]);
-  const [notesLoading, setNotesLoading] = useState(false);
-  const [isAddNoteModalOpen, setIsAddNoteModalOpen] = useState(false);
-  const [newHeading, setNewHeading] = useState("");
-  const [newDescription, setNewDescription] = useState("");
-  const [newText, setNewText] = useState("");
-  const [isSavingNote, setIsSavingNote] = useState(false);
-  const [copiedNoteId, setCopiedNoteId] = useState<string | null>(null);
-
-  const fetchImportantNotes = useCallback(async () => {
-    try {
-      const cached = localStorage.getItem("hub_important_notes");
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed)) setImportantNotes(parsed);
-      }
-    } catch {}
-
-    setNotesLoading(true);
-    try {
-      const res = await fetch("/api/important-notes");
-      if (res.ok) {
-        const data = await res.json();
-        if (data && Array.isArray(data.notes)) {
-          setImportantNotes(data.notes);
-          try {
-            localStorage.setItem("hub_important_notes", JSON.stringify(data.notes));
-          } catch {}
-        }
-      }
-    } catch (err) {
-      console.error("Failed to fetch important notes:", err);
-    } finally {
-      setNotesLoading(false);
-    }
-  }, []);
-
-  const handleCreateNote = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const heading = newHeading.trim();
-    const text = newText.trim();
-    const description = newDescription.trim();
-    if (!heading || !text) return;
-
-    setIsSavingNote(true);
-    const tempId = `note-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    const newNote: ImportantNote = {
-      id: tempId,
-      heading,
-      description,
-      text,
-      createdAt: new Date().toISOString(),
-    };
-
-    const updated = [newNote, ...importantNotes];
-    setImportantNotes(updated);
-    try {
-      localStorage.setItem("hub_important_notes", JSON.stringify(updated));
-    } catch {}
-
-    try {
-      const res = await fetch("/api/important-notes", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: tempId,
-          heading,
-          description,
-          text,
-        }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.item) {
-          setImportantNotes((prev) =>
-            prev.map((n) => (n.id === tempId ? data.item : n))
-          );
-        }
-      }
-    } catch (err) {
-      console.error("Failed to save note to server:", err);
-    } finally {
-      setIsSavingNote(false);
-      setNewHeading("");
-      setNewDescription("");
-      setNewText("");
-      setIsAddNoteModalOpen(false);
-    }
-  };
-
-  const handleDeleteNote = async (id: string) => {
-    const updated = importantNotes.filter((n) => n.id !== id);
-    setImportantNotes(updated);
-    try {
-      localStorage.setItem("hub_important_notes", JSON.stringify(updated));
-    } catch {}
-
-    try {
-      await fetch(`/api/important-notes?id=${encodeURIComponent(id)}`, {
-        method: "DELETE",
-      });
-    } catch (err) {
-      console.error("Failed to delete note from server:", err);
-    }
-  };
-
-  const handleCopyNoteText = (text: string, id: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedNoteId(id);
-    setTimeout(() => {
-      setCopiedNoteId(null);
-    }, 2000);
-  };
-
 
   useEffect(() => {
     if (!isWorkspaceAwake) return;
@@ -306,12 +190,6 @@ export default function HomePortal() {
   useEffect(() => {
     checkAuth();
   }, [checkAuth]);
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchImportantNotes();
-    }
-  }, [isAuthenticated, fetchImportantNotes]);
 
   useEffect(() => {
     setNow(new Date());
@@ -579,7 +457,7 @@ export default function HomePortal() {
           "--accent-rgb": accentRgb,
         } as React.CSSProperties
       }
-      className="relative min-h-screen h-screen bg-[#07090e] text-slate-100 font-sans flex flex-col justify-between overflow-y-auto overflow-x-hidden select-none"
+      className="relative h-screen max-h-screen bg-[#07090e] text-slate-100 font-sans flex flex-col justify-between overflow-hidden select-none"
     >
       {/* Ambient Background */}
       <div className="fixed inset-0 pointer-events-none -z-10 overflow-hidden">
@@ -1145,6 +1023,13 @@ export default function HomePortal() {
                   delay: "0.28s",
                   isMono: true,
                 },
+                {
+                  href: "/snippets",
+                  label: "Snippets",
+                  icon: "📋",
+                  accent: "rose" as AccentColor,
+                  delay: "0.33s",
+                },
               ].map((item) => (
                 <Link
                   key={item.href}
@@ -1189,197 +1074,8 @@ export default function HomePortal() {
             </div>
         )}
 
-        {/* IMPORTANT TEXT CARD */}
-        <div className="w-full max-w-xl mx-auto rounded-2xl bg-[#0d1017]/85 backdrop-blur-2xl border border-white/[0.08] shadow-[0_18px_45px_rgba(0,0,0,0.7)] p-3.5 sm:p-4 flex flex-col gap-2.5">
-          {/* Header */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="w-6 h-6 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 text-xs">
-                📌
-              </span>
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-200">
-                Important Text
-              </span>
-              <span className="px-1.5 py-0.2 rounded-full bg-white/[0.06] border border-white/[0.08] text-[10px] font-mono text-slate-400">
-                {importantNotes.length}
-              </span>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setIsAddNoteModalOpen(true)}
-              className="px-2.5 py-1 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 hover:text-amber-200 text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95"
-            >
-              <span className="text-sm font-bold leading-none">+</span>
-              <span>Add</span>
-            </button>
-          </div>
-
-          {/* List of Entries */}
-          <div className="max-h-[160px] sm:max-h-[190px] overflow-y-auto scrollbar-thin space-y-2 pr-0.5">
-            {notesLoading && importantNotes.length === 0 ? (
-              <div className="py-5 flex flex-col items-center justify-center gap-2 text-slate-500 text-xs">
-                <span className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
-                <span>Loading notes...</span>
-              </div>
-            ) : importantNotes.length === 0 ? (
-              <div className="py-4 px-3 rounded-xl bg-white/[0.02] border border-dashed border-white/[0.07] text-center flex flex-col items-center justify-center gap-0.5">
-                <p className="text-xs text-slate-400 font-medium">No important text saved</p>
-                <p className="text-[11px] text-slate-500">Click &ldquo;+ Add&rdquo; to save snippets, keys, or notes.</p>
-              </div>
-            ) : (
-              importantNotes.map((note) => (
-                <div
-                  key={note.id}
-                  className="group relative p-2.5 sm:p-3 rounded-xl bg-[#141824]/90 border border-white/[0.07] hover:border-amber-500/30 transition shadow-sm flex flex-col gap-1.5"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <h4 className="text-xs font-bold text-white truncate">
-                          {note.heading}
-                        </h4>
-                        <span className="text-[9.5px] font-mono text-slate-500 shrink-0">
-                          {new Date(note.createdAt).toLocaleDateString([], {
-                            month: "short",
-                            day: "numeric",
-                          })}
-                        </span>
-                      </div>
-                      {note.description && (
-                        <p className="text-[11px] text-slate-400 line-clamp-1 mt-0.5">
-                          {note.description}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => handleCopyNoteText(note.text, note.id)}
-                        title="Copy text to clipboard"
-                        className="px-2 py-0.5 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] text-[10px] font-mono text-slate-300 hover:text-white border border-white/[0.08] transition flex items-center gap-1 cursor-pointer"
-                      >
-                        {copiedNoteId === note.id ? (
-                          <span className="text-emerald-400 font-semibold">✓ Copied</span>
-                        ) : (
-                          <span>Copy</span>
-                        )}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteNote(note.id)}
-                        title="Delete note"
-                        className="p-1 rounded-lg hover:bg-rose-500/20 text-slate-500 hover:text-rose-400 transition cursor-pointer"
-                      >
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Text snippet */}
-                  <div className="p-2 rounded-lg bg-[#07090e] border border-white/[0.05] font-mono text-[11px] text-slate-200 select-text whitespace-pre-wrap break-words max-h-20 overflow-y-auto scrollbar-thin">
-                    {note.text}
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
       </main>
 
-
-      {/* ADD IMPORTANT TEXT MODAL */}
-      {isAddNoteModalOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150"
-          onClick={() => setIsAddNoteModalOpen(false)}
-        >
-          <div
-            className="bg-[#0d1017] border border-amber-500/25 rounded-2xl w-full max-w-md shadow-2xl p-5 space-y-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <span className="text-amber-400">📌</span>
-                <span>Save Important Text</span>
-              </h3>
-              <button
-                type="button"
-                onClick={() => setIsAddNoteModalOpen(false)}
-                className="text-slate-400 hover:text-white text-sm"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateNote} className="space-y-3">
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider mb-1">
-                  Heading <span className="text-rose-400">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  autoFocus
-                  value={newHeading}
-                  onChange={(e) => setNewHeading(e.target.value)}
-                  placeholder="e.g. WiFi Password, Server IP, API Secret..."
-                  className="w-full bg-[#07090e] border border-white/[0.09] focus:border-amber-400/50 rounded-xl px-3.5 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
-                  Description <span className="text-slate-500 text-[10px] normal-case font-normal">(optional)</span>
-                </label>
-                <input
-                  type="text"
-                  value={newDescription}
-                  onChange={(e) => setNewDescription(e.target.value)}
-                  placeholder="e.g. Production credentials or notes..."
-                  className="w-full bg-[#07090e] border border-white/[0.09] focus:border-amber-400/50 rounded-xl px-3.5 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider mb-1">
-                  Text <span className="text-rose-400">*</span>
-                </label>
-                <textarea
-                  required
-                  rows={4}
-                  value={newText}
-                  onChange={(e) => setNewText(e.target.value)}
-                  placeholder="Paste your important text or notes here..."
-                  className="w-full bg-[#07090e] border border-white/[0.09] focus:border-amber-400/50 rounded-xl px-3.5 py-2 text-xs font-mono text-slate-100 placeholder:text-slate-500 focus:outline-none resize-none"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => setIsAddNoteModalOpen(false)}
-                  className="px-3.5 py-1.5 text-xs text-slate-400 hover:text-white bg-slate-800 rounded-lg cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSavingNote || !newHeading.trim() || !newText.trim()}
-                  className="px-4 py-1.5 text-xs font-semibold bg-amber-400 hover:bg-amber-300 !text-slate-950 disabled:opacity-50 rounded-lg shadow-sm transition cursor-pointer"
-                >
-                  {isSavingNote ? "Saving..." : "Save"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       <div className="h-2" />
     </div>

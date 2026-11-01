@@ -27,6 +27,8 @@ import type {
   SavedCommand,
   MonthlyExpense,
   ImportantNote,
+  SavedSnippet,
+  SnippetCategory,
 } from "./types";
 
 let poolInstance: Pool | null = null;
@@ -46,6 +48,7 @@ let bulkOpenersInitialized = false;
 let commandsInitialized = false;
 let monthlyExpensesInitialized = false;
 let importantNotesInitialized = false;
+let snippetsInitialized = false;
 
 function resolveConnectionString(raw: string): string {
   try {
@@ -3259,4 +3262,249 @@ export async function deleteImportantNote(id: string, userId: string): Promise<v
   await ensureImportantNotesTableExists();
   const pool = getPool();
   await pool.query("DELETE FROM important_notes WHERE id = $1 AND user_id = $2", [id, userId]);
+}
+
+
+export async function ensureSnippetsTableExists(): Promise<void> {
+  if (snippetsInitialized) return;
+  const pool = getPool();
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS snippets (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT DEFAULT '',
+      content TEXT NOT NULL,
+      category TEXT DEFAULT 'general',
+      is_pinned BOOLEAN DEFAULT false,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_snippets_user_id ON snippets(user_id);
+    CREATE INDEX IF NOT EXISTS idx_snippets_category ON snippets(category);
+
+    CREATE TABLE IF NOT EXISTS snippet_categories (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      icon TEXT DEFAULT '🏷️',
+      color TEXT DEFAULT 'rose',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      CONSTRAINT uq_snippet_categories_user_name UNIQUE (user_id, name)
+    );
+    CREATE INDEX IF NOT EXISTS idx_snippet_categories_user_id ON snippet_categories(user_id);
+
+    -- Migrate any previous notes into snippets
+    DO \$\$
+    BEGIN
+      IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'important_notes') THEN
+        INSERT INTO snippets (id, user_id, title, description, content, created_at, updated_at)
+        SELECT id, user_id, heading, description, text, created_at, updated_at
+        FROM important_notes
+        ON CONFLICT (id) DO NOTHING;
+      END IF;
+    END \$\$;
+  `);
+  snippetsInitialized = true;
+}
+
+export async function getSnippets(userId: string): Promise<SavedSnippet[]> {
+  await ensureSnippetsTableExists();
+  const pool = getPool();
+  const { rows } = await pool.query<{
+    id: string;
+    title: string;
+    description: string | null;
+    content: string;
+    category: string | null;
+    is_pinned: boolean | null;
+    created_at: Date | string;
+    updated_at: Date | string | null;
+    user_id: string;
+  }>(
+    "SELECT id, title, description, content, category, is_pinned, created_at, updated_at, user_id FROM snippets WHERE user_id = $1 ORDER BY is_pinned DESC, created_at DESC",
+    [userId]
+  );
+
+  return rows.map((row) => ({
+    id: row.id,
+    title: row.title,
+    description: row.description || "",
+    content: row.content,
+    category: row.category || "general",
+    isPinned: Boolean(row.is_pinned),
+    createdAt: typeof row.created_at === "string" ? row.created_at : row.created_at.toISOString(),
+    updatedAt: row.updated_at ? (typeof row.updated_at === "string" ? row.updated_at : row.updated_at.toISOString()) : undefined,
+    userId: row.user_id,
+  }));
+}
+
+export async function getSnippetById(id: string): Promise<SavedSnippet | null> {
+  await ensureSnippetsTableExists();
+  const pool = getPool();
+  const { rows } = await pool.query<{
+    id: string;
+    title: string;
+    description: string | null;
+    content: string;
+    category: string | null;
+    is_pinned: boolean | null;
+    created_at: Date | string;
+    updated_at: Date | string | null;
+    user_id: string;
+  }>(
+    "SELECT id, title, description, content, category, is_pinned, created_at, updated_at, user_id FROM snippets WHERE id = $1 LIMIT 1",
+    [id]
+  );
+
+  if (rows.length === 0) return null;
+  const row = rows[0];
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description || "",
+    content: row.content,
+    category: row.category || "general",
+    isPinned: Boolean(row.is_pinned),
+    createdAt: typeof row.created_at === "string" ? row.created_at : row.created_at.toISOString(),
+    updatedAt: row.updated_at ? (typeof row.updated_at === "string" ? row.updated_at : row.updated_at.toISOString()) : undefined,
+    userId: row.user_id,
+  };
+}
+
+export async function saveSnippet(
+  snippet: {
+    id: string;
+    title: string;
+    description?: string;
+    content: string;
+    category?: string;
+    isPinned?: boolean;
+    createdAt?: string;
+  },
+  userId: string
+): Promise<SavedSnippet> {
+  await ensureSnippetsTableExists();
+  const pool = getPool();
+  const createdAt = snippet.createdAt || new Date().toISOString();
+
+  await pool.query(
+    `
+    INSERT INTO snippets (id, user_id, title, description, content, category, is_pinned, created_at, updated_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+    ON CONFLICT (id) DO UPDATE SET
+      title = EXCLUDED.title,
+      description = EXCLUDED.description,
+      content = EXCLUDED.content,
+      category = EXCLUDED.category,
+      is_pinned = EXCLUDED.is_pinned,
+      updated_at = NOW(),
+      user_id = COALESCE(snippets.user_id, EXCLUDED.user_id)
+    `,
+    [
+      snippet.id,
+      userId,
+      snippet.title,
+      snippet.description || "",
+      snippet.content,
+      snippet.category || "general",
+      Boolean(snippet.isPinned),
+      createdAt,
+    ]
+  );
+
+  return {
+    id: snippet.id,
+    title: snippet.title,
+    description: snippet.description || "",
+    content: snippet.content,
+    category: snippet.category || "general",
+    isPinned: Boolean(snippet.isPinned),
+    createdAt,
+    updatedAt: new Date().toISOString(),
+    userId,
+  };
+}
+
+export async function deleteSnippet(id: string, userId: string): Promise<void> {
+  await ensureSnippetsTableExists();
+  const pool = getPool();
+  await pool.query("DELETE FROM snippets WHERE id = $1 AND user_id = $2", [id, userId]);
+}
+
+export async function getSnippetCategories(userId: string): Promise<SnippetCategory[]> {
+  await ensureSnippetsTableExists();
+  const pool = getPool();
+  const { rows } = await pool.query<{
+    id: string;
+    name: string;
+    icon: string | null;
+    color: string | null;
+    user_id: string;
+    created_at: Date | string;
+  }>(
+    "SELECT id, name, icon, color, user_id, created_at FROM snippet_categories WHERE user_id = $1 ORDER BY created_at ASC",
+    [userId]
+  );
+
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    icon: r.icon || "🏷️",
+    color: r.color || "rose",
+    userId: r.user_id,
+    createdAt: typeof r.created_at === "string" ? r.created_at : r.created_at.toISOString(),
+  }));
+}
+
+export async function createSnippetCategory(
+  name: string,
+  userId: string,
+  icon: string = "🏷️",
+  color: string = "rose"
+): Promise<SnippetCategory> {
+  await ensureSnippetsTableExists();
+  const pool = getPool();
+  const id = `cat-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const cleanName = name.trim();
+  const { rows } = await pool.query<{
+    id: string;
+    name: string;
+    icon: string | null;
+    color: string | null;
+    user_id: string;
+    created_at: Date | string;
+  }>(
+    `INSERT INTO snippet_categories (id, user_id, name, icon, color)
+     VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (user_id, name) DO UPDATE SET icon = EXCLUDED.icon, color = EXCLUDED.color
+     RETURNING id, name, icon, color, user_id, created_at`,
+    [id, userId, cleanName, icon, color]
+  );
+  const r = rows[0];
+  return {
+    id: r.id,
+    name: r.name,
+    icon: r.icon || "🏷️",
+    color: r.color || "rose",
+    userId: r.user_id,
+    createdAt: typeof r.created_at === "string" ? r.created_at : r.created_at.toISOString(),
+  };
+}
+
+export async function deleteSnippetCategory(id: string, userId: string): Promise<void> {
+  await ensureSnippetsTableExists();
+  const pool = getPool();
+  const { rows } = await pool.query<{ name: string }>(
+    "SELECT name FROM snippet_categories WHERE id = $1 AND user_id = $2",
+    [id, userId]
+  );
+  if (rows.length > 0) {
+    const catName = rows[0].name;
+    await pool.query(
+      "UPDATE snippets SET category = '' WHERE user_id = $1 AND LOWER(category) = LOWER($2)",
+      [userId, catName]
+    );
+  }
+  await pool.query("DELETE FROM snippet_categories WHERE id = $1 AND user_id = $2", [id, userId]);
 }

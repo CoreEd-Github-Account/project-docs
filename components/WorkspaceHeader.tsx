@@ -26,6 +26,7 @@ const WORKSPACE_LINKS = [
   { href: "/passwords", label: "Passwords", icon: "🔑" },
   { href: "/prompts", label: "Prompts", icon: "💡" },
   { href: "/commands", label: "Commands", icon: ">_" },
+  { href: "/snippets", label: "Snippets", icon: "📋" },
 ];
 
 export function WorkspaceHeader({
@@ -38,7 +39,7 @@ export function WorkspaceHeader({
 
   return (
     <header className="sticky top-0 z-30 bg-[#08090e]/85 backdrop-blur-xl border-b border-white/[0.06]">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
+      <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between gap-4">
         {/* Left: Home Button + Clean Workspace Navigation */}
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
           <Link
@@ -58,14 +59,14 @@ export function WorkspaceHeader({
 
           <div className="h-4 w-px bg-white/[0.08] shrink-0" />
 
-          <nav aria-label="Workspaces" className="flex items-center gap-1">
+          <nav aria-label="Workspaces" className="flex items-center gap-1 shrink-0">
             {WORKSPACE_LINKS.map((item) => {
               const isActive = pathname === item.href || pathname?.startsWith(`${item.href}/`);
               return (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition ${
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition shrink-0 ${
                     isActive
                       ? "bg-white/[0.1] text-white font-semibold border border-white/[0.12]"
                       : "text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]"
