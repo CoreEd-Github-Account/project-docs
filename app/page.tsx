@@ -914,7 +914,7 @@ export default function HomePortal() {
       <main className="flex-1 max-w-4xl w-full mx-auto px-4 flex flex-col items-center justify-start pt-1 sm:pt-2 lg:pt-2 -mt-4 sm:-mt-6 lg:-mt-8 gap-3 sm:gap-4 z-10">
         {/* Clean Centered Time & Compact Weather Pill */}
         <div className="flex flex-col items-center text-center gap-1.5 sm:gap-2">
-          <div className="text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-black text-white tracking-tight font-mono tabular-nums drop-shadow-2xl leading-none">
+          <div className="text-4xl sm:text-6xl md:text-[5rem] lg:text-[5rem] font-black text-white tracking-tight font-mono tabular-nums drop-shadow-2xl leading-none">
             {timeString || "00:00:00 AM"}
           </div>
 
