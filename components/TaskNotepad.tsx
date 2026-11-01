@@ -2111,9 +2111,22 @@ export function TaskNotepad({
                   e.stopPropagation();
                   setActiveFolder(task.folder!);
                 }}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-white/[0.04] border border-white/[0.08] text-slate-300 hover:bg-white/[0.08] cursor-pointer transition shrink-0"
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-amber-500/[0.08] border border-amber-500/20 text-amber-300 hover:bg-amber-500/[0.14] hover:border-amber-500/30 cursor-pointer transition shrink-0"
                 title={`Folder: ${task.folder}. Click to filter`}
               >
+                <svg
+                  className="w-2.5 h-2.5 text-amber-400 shrink-0"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.8}
+                    d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+                  />
+                </svg>
                 {task.folder}
               </span>
             )}
@@ -2300,23 +2313,80 @@ export function TaskNotepad({
         </div>
       </div>
 
-      {/* TASK FOLDERS TAB BAR */}
-      <div className="bg-[#07090e] border border-white/[0.07] rounded-xl p-2 flex items-center justify-between gap-3 overflow-hidden">
-        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-thin py-0.5 min-w-0 flex-1">
+      {/* TASK FOLDERS AREA (Highlighted & Subtle Yellow Color) */}
+      <div className="p-3.5 sm:p-4 rounded-2xl bg-amber-500/[0.04] border border-amber-500/15 shadow-[0_4px_20px_rgba(0,0,0,0.18)] mb-6 flex flex-col gap-2.5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+              <svg
+                className="w-3.5 h-3.5 text-amber-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+                />
+              </svg>
+              Folders
+            </span>
+            <span className="px-1.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/25 text-[10px] font-mono font-medium text-amber-300">
+              {folders.length}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2.5">
+            {activeFolder !== "all" && activeFolder !== "general" && (
+              <span className="text-[11px] text-amber-300/80 font-mono hidden sm:inline">
+                Active:{" "}
+                <span className="text-amber-200 font-semibold">{activeFolder}</span>
+              </span>
+            )}
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() => {
+                  setNewFolderInput("");
+                  setIsAddFolderModalOpen(true);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-amber-500/[0.08] hover:bg-amber-500/[0.15] border border-amber-500/25 text-amber-200 hover:text-amber-100 rounded-xl transition cursor-pointer"
+                title="Create a new task folder in this project"
+              >
+                <svg
+                  className="w-3.5 h-3.5 text-amber-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.8}
+                    d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+                  />
+                </svg>
+                <span>+ Folder</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap pt-0.5">
           {/* All Tasks Tab */}
           <button
             type="button"
             onClick={() => setActiveFolder("all")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 shrink-0 cursor-pointer ${
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-medium transition cursor-pointer ${
               activeFolder === "all"
-                ? "bg-white text-slate-950"
-                : "text-slate-400 hover:text-slate-200 hover:bg-[#0d1017] border border-transparent"
+                ? "bg-amber-500/20 border-amber-500/40 text-amber-100 shadow-[0_0_12px_rgba(245,158,11,0.15)]"
+                : "bg-[#0d1017] border-white/[0.08] text-slate-400 hover:text-slate-200 hover:border-white/[0.15]"
             }`}
           >
             <span>All Tasks</span>
-            <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
-              activeFolder === "all" ? "bg-slate-950/15 text-slate-950" : "bg-white/[0.06] text-slate-400"
-            }`}>
+            <span className="font-mono text-[10px] opacity-75">
               {tasks.length}
             </span>
           </button>
@@ -2326,15 +2396,14 @@ export function TaskNotepad({
             <button
               type="button"
               onClick={() => setActiveFolder("general")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 shrink-0 cursor-pointer ${
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-medium transition cursor-pointer ${
                 activeFolder === "general"
-                  ? "bg-slate-700 text-white shadow-sm"
-                  : "text-slate-400 hover:text-slate-200 hover:bg-[#0d1017] border border-transparent"
+                  ? "bg-amber-500/20 border-amber-500/40 text-amber-100 shadow-[0_0_12px_rgba(245,158,11,0.15)]"
+                  : "bg-[#0d1017] border-white/[0.08] text-slate-400 hover:text-slate-200 hover:border-white/[0.15]"
               }`}
             >
-              
               <span>General</span>
-              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-400">
+              <span className="font-mono text-[10px] opacity-75">
                 {tasks.filter((t) => !t.folder || t.folder.trim() === "").length}
               </span>
             </button>
@@ -2347,28 +2416,41 @@ export function TaskNotepad({
             return (
               <div
                 key={f}
-                className={`group flex items-center rounded-lg transition shrink-0 ${
+                onClick={() => setActiveFolder(f)}
+                className={`group flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-medium transition cursor-pointer select-none ${
                   isActive
-                    ? "bg-white text-slate-950 border border-white"
-                    : "bg-[#0d1017]/60 hover:bg-[#0d1017] border border-white/[0.07] text-slate-400 hover:text-slate-200"
+                    ? "bg-amber-500/25 border-amber-500/50 text-amber-100 shadow-[0_0_15px_rgba(245,158,11,0.22)]"
+                    : "bg-amber-500/[0.07] border-amber-500/20 text-amber-200/90 hover:bg-amber-500/[0.14] hover:border-amber-500/35 hover:text-amber-100"
                 }`}
               >
-                <button
-                  type="button"
-                  onClick={() => setActiveFolder(f)}
-                  className="px-3 py-1.5 text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                <svg
+                  className={`w-3.5 h-3.5 shrink-0 transition-colors ${
+                    isActive
+                      ? "text-amber-300"
+                      : "text-amber-400/80 group-hover:text-amber-300"
+                  }`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
                 >
-                  
-                  <span>{f}</span>
-                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
-                    isActive ? "bg-white text-slate-950" : "bg-slate-800 text-slate-400"
-                  }`}>
-                    {count}
-                  </span>
-                </button>
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.8}
+                    d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+                  />
+                </svg>
+                <span className="truncate max-w-[140px]">{f}</span>
+                <span
+                  className={`font-mono text-[10px] ${
+                    isActive ? "text-amber-300 font-semibold" : "text-amber-400/70"
+                  }`}
+                >
+                  {count}
+                </span>
 
                 {canEdit && (
-                  <div className="flex items-center pr-1.5 opacity-60 group-hover:opacity-100 transition">
+                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition pl-0.5">
                     <button
                       type="button"
                       onClick={(e) => {
@@ -2377,7 +2459,7 @@ export function TaskNotepad({
                         setRenameFolderInput(f);
                       }}
                       title={`Rename folder "${f}"`}
-                      className="p-1 hover:text-white rounded transition text-[11px] cursor-pointer"
+                      className="p-0.5 hover:text-amber-200 text-amber-400/60 rounded transition text-[11px] cursor-pointer"
                     >
                       ✎
                     </button>
@@ -2389,7 +2471,7 @@ export function TaskNotepad({
                           handleDeleteFolder(f);
                         }}
                         title={`Delete folder "${f}"`}
-                        className="p-1 hover:text-rose-400 rounded transition text-[11px] cursor-pointer"
+                        className="p-0.5 hover:text-rose-400 text-amber-400/60 rounded transition text-[11px] cursor-pointer"
                       >
                         ✕
                       </button>
@@ -2400,22 +2482,6 @@ export function TaskNotepad({
             );
           })}
         </div>
-
-        {/* Add Folder Button */}
-        {canEdit && (
-          <button
-            type="button"
-            onClick={() => {
-              setNewFolderInput("");
-              setIsAddFolderModalOpen(true);
-            }}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 hover:text-white rounded-lg transition shrink-0 cursor-pointer"
-            title="Create a new task folder in this project"
-          >
-            <span>+</span>
-            <span>New Folder</span>
-          </button>
-        )}
       </div>
 
       {/* METRICS & STAGE NAVIGATION */}
@@ -3597,12 +3663,24 @@ export function TaskNotepad({
       {isAddFolderModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
           <div
-            className="bg-[#0d1017] border border-slate-700/80 rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-150 p-5 space-y-4"
+            className="bg-[#0d1017] border border-amber-500/25 rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-150 p-5 space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                
+                <svg
+                  className="w-4 h-4 text-amber-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.8}
+                    d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+                  />
+                </svg>
                 <span>Create New Folder</span>
               </h3>
               <button
@@ -3632,7 +3710,7 @@ export function TaskNotepad({
                 value={newFolderInput}
                 onChange={(e) => setNewFolderInput(e.target.value)}
                 placeholder="Folder name (e.g. Backend, Frontend)..."
-                className="w-full bg-[#07090e] border border-white/[0.07] rounded-xl px-3.5 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-white/[0.22]"
+                className="w-full bg-[#07090e] border border-white/[0.09] focus:border-amber-400/50 rounded-xl px-3.5 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none"
               />
               <div className="flex items-center justify-end gap-2 pt-1">
                 <button
@@ -3645,7 +3723,7 @@ export function TaskNotepad({
                 <button
                   type="submit"
                   disabled={!newFolderInput.trim()}
-                  className="px-4 py-1.5 text-xs font-semibold bg-white hover:bg-slate-200 !text-slate-950 disabled:opacity-50 text-white rounded-lg shadow-sm transition cursor-pointer"
+                  className="px-4 py-1.5 text-xs font-semibold bg-amber-400 hover:bg-amber-300 !text-slate-950 disabled:opacity-50 rounded-lg shadow-sm transition cursor-pointer"
                 >
                   Create Folder
                 </button>
@@ -3659,12 +3737,24 @@ export function TaskNotepad({
       {folderToRename && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
           <div
-            className="bg-[#0d1017] border border-slate-700/80 rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-150 p-5 space-y-4"
+            className="bg-[#0d1017] border border-amber-500/25 rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-150 p-5 space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <span>✎</span>
+                <svg
+                  className="w-4 h-4 text-amber-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.8}
+                    d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+                  />
+                </svg>
                 <span>Rename Folder</span>
               </h3>
               <button
@@ -3693,7 +3783,7 @@ export function TaskNotepad({
                 value={renameFolderInput}
                 onChange={(e) => setRenameFolderInput(e.target.value)}
                 placeholder="New folder name..."
-                className="w-full bg-[#07090e] border border-white/[0.07] rounded-xl px-3.5 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-white/[0.22]"
+                className="w-full bg-[#07090e] border border-white/[0.09] focus:border-amber-400/50 rounded-xl px-3.5 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none"
               />
               <div className="flex items-center justify-end gap-2 pt-1">
                 <button
@@ -3706,9 +3796,9 @@ export function TaskNotepad({
                 <button
                   type="submit"
                   disabled={!renameFolderInput.trim()}
-                  className="px-4 py-1.5 text-xs font-semibold bg-white hover:bg-slate-200 !text-slate-950 disabled:opacity-50 text-white rounded-lg shadow-sm transition cursor-pointer"
+                  className="px-4 py-1.5 text-xs font-semibold bg-amber-400 hover:bg-amber-300 !text-slate-950 disabled:opacity-50 rounded-lg shadow-sm transition cursor-pointer"
                 >
-                  Save
+                  Save Changes
                 </button>
               </div>
             </form>
