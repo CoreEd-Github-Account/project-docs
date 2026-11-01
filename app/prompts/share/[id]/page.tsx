@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, use } from "react";
+import React, { useEffect, useState, use, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { LoginForm } from "@/components/LoginForm";
@@ -13,7 +13,7 @@ interface SharedPromptData {
   createdAt?: string;
 }
 
-export default function SharedPromptPage({
+function SharedPromptContent({
   params,
 }: {
   params: Promise<{ id: string }>;
@@ -315,5 +315,22 @@ export default function SharedPromptPage({
         )}
       </div>
     </div>
+  );
+}
+
+export default function SharedPromptPage(props: {
+  params: Promise<{ id: string }>;
+}) {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#07090e] flex flex-col items-center justify-center text-slate-400 p-4">
+          <div className="w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full animate-spin mb-4" />
+          <p className="text-sm font-medium text-slate-300">Loading shared prompt...</p>
+        </div>
+      }
+    >
+      <SharedPromptContent params={props.params} />
+    </Suspense>
   );
 }
