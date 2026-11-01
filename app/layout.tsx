@@ -18,7 +18,11 @@ export const metadata: Metadata = {
   description: "Manage projects, document templates, subscriptions, and credentials.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html
       lang="en"
