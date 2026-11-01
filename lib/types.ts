@@ -290,6 +290,7 @@ export interface MonthlyExpense {
   amount: number;
   dueDate: string; // YYYY-MM-DD
   isPaid?: boolean;
+  paidMonth?: string | null;
   createdAt?: number;
   userId?: string;
 }

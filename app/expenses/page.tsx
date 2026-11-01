@@ -5,6 +5,65 @@ import { LoginForm } from "@/components/LoginForm";
 import { WorkspaceHeader } from "@/components/WorkspaceHeader";
 import type { MonthlyExpense } from "@/lib/types";
 
+export type ExpenseStatus = "paid" | "unpaid" | "due";
+
+function getCurrentMonthKey(): string {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}`;
+}
+
+function getTodayDateString(): string {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
+function getMonthlyEffectiveDueDate(dueDateStr: string): string {
+  if (!dueDateStr) return "";
+  const parts = dueDateStr.split("-").map(Number);
+  if (parts.length < 3) return dueDateStr;
+
+  const dueDay = parts[2];
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
+  const maxDays = new Date(year, month, 0).getDate();
+  const clampedDay = Math.min(dueDay, maxDays);
+
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${year}-${pad(month)}-${pad(clampedDay)}`;
+}
+
+function isExpensePaidForCurrentMonth(expense: MonthlyExpense): boolean {
+  const currentMonth = getCurrentMonthKey();
+  if (expense.paidMonth === currentMonth) {
+    return true;
+  }
+  if (expense.paidMonth && expense.paidMonth !== currentMonth) {
+    return false;
+  }
+  if (expense.isPaid && expense.dueDate.startsWith(currentMonth)) {
+    return true;
+  }
+  return false;
+}
+
+function getExpenseStatus(expense: MonthlyExpense): ExpenseStatus {
+  if (isExpensePaidForCurrentMonth(expense)) {
+    return "paid";
+  }
+
+  const effectiveDueDate = getMonthlyEffectiveDueDate(expense.dueDate);
+  const todayStr = getTodayDateString();
+
+  if (todayStr > effectiveDueDate) {
+    return "due";
+  }
+
+  return "unpaid";
+}
+
 export default function MonthlyExpensesPage() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [expenses, setExpenses] = useState<MonthlyExpense[]>([]);
@@ -147,7 +206,11 @@ export default function MonthlyExpensesPage() {
       if (Array.isArray(data)) {
         setExpenses(data);
       } else {
-        setExpenses(Array.isArray(data.expenses) ? data.expenses : []);
+        const raw = Array.isArray(data.expenses) ? data.expenses : [];
+        setExpenses(raw.map((exp: MonthlyExpense) => ({
+          ...exp,
+          dueDate: getMonthlyEffectiveDueDate(exp.dueDate),
+        })));
         if (Array.isArray(data.categories)) {
           setCustomCategories(data.categories);
         }
@@ -268,6 +331,7 @@ export default function MonthlyExpensesPage() {
       amount: amountNum,
       dueDate: formDueDate,
       isPaid: existing ? Boolean(existing.isPaid) : false,
+      paidMonth: existing ? existing.paidMonth : null,
     };
 
     setSaveStatus("saving");
@@ -301,23 +365,24 @@ export default function MonthlyExpensesPage() {
     }
   };
 
-  const handleMarkPaidNextMonth = async (exp: MonthlyExpense) => {
-    const parts = exp.dueDate.split("-").map(Number);
-    let nextDueDate = exp.dueDate;
-    if (parts.length === 3) {
-      const d = new Date(parts[0], parts[1] - 1, parts[2]);
-      d.setMonth(d.getMonth() + 1);
-      const pad = (n: number) => String(n).padStart(2, "0");
-      nextDueDate = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(
-        d.getDate()
-      )}`;
-    }
+  const handleTogglePaid = async (exp: MonthlyExpense) => {
+    const currentMonthKey = getCurrentMonthKey();
+    const effectiveDueDate = getMonthlyEffectiveDueDate(exp.dueDate);
+    const currentlyPaid = isExpensePaidForCurrentMonth(exp);
+
+    const nextIsPaid = !currentlyPaid;
+    const nextPaidMonth = nextIsPaid ? currentMonthKey : null;
 
     const updated: MonthlyExpense = {
       ...exp,
-      dueDate: nextDueDate,
-      isPaid: false,
+      dueDate: effectiveDueDate,
+      isPaid: nextIsPaid,
+      paidMonth: nextPaidMonth,
     };
+
+    setExpenses((prev) =>
+      prev.map((item) => (item.id === exp.id ? updated : item))
+    );
 
     setSaveStatus("saving");
     try {
@@ -326,19 +391,14 @@ export default function MonthlyExpensesPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updated),
       });
-      if (!res.ok) throw new Error("Failed to update due date");
-
-      setExpenses((prev) =>
-        prev.map((item) => (item.id === exp.id ? updated : item))
-      );
-      setCalculatedTimes((prev) => ({
-        ...prev,
-        [exp.id]: calculateRemaining(nextDueDate),
-      }));
+      if (!res.ok) throw new Error("Failed to update payment status");
       setSaveStatus("saved");
     } catch (err) {
-      console.error("Error advancing due date:", err);
+      console.error("Error toggling payment status:", err);
       setSaveStatus("error");
+      setExpenses((prev) =>
+        prev.map((item) => (item.id === exp.id ? exp : item))
+      );
     }
   };
 
@@ -404,7 +464,7 @@ export default function MonthlyExpensesPage() {
 
     expenses.forEach((exp) => {
       totalMonthly += exp.amount;
-      if (!exp.isPaid && isWithinThreeDays(exp.dueDate)) {
+      if (!isExpensePaidForCurrentMonth(exp) && isWithinThreeDays(exp.dueDate)) {
         reminderItems.push(exp);
       }
     });
@@ -420,7 +480,7 @@ export default function MonthlyExpensesPage() {
     return [...expenses]
       .filter((exp) => {
         if (filter === "reminder") {
-          return !exp.isPaid && isWithinThreeDays(exp.dueDate);
+          return !isExpensePaidForCurrentMonth(exp) && isWithinThreeDays(exp.dueDate);
         }
         return true;
       })
@@ -554,6 +614,9 @@ export default function MonthlyExpensesPage() {
           <div className="rounded-2xl bg-[#0d1017] border border-white/[0.07] divide-y divide-white/[0.06] overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.6)]">
             {displayedExpenses.map((exp) => {
               const calc = calculatedTimes[exp.id];
+              const status = getExpenseStatus(exp);
+              const isPaid = status === "paid";
+              const isDue = status === "due";
               const dueSoon = isWithinThreeDays(exp.dueDate);
 
               return (
@@ -631,13 +694,42 @@ export default function MonthlyExpensesPage() {
                     </div>
 
                     {/* Actions */}
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1.5">
+                      {/* Interactive Status Badge: Unpaid -> Due -> Paid */}
                       <button
-                        onClick={() => handleMarkPaidNextMonth(exp)}
-                        title="Mark paid and advance due date by 1 month"
-                        className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/25 transition cursor-pointer"
+                        type="button"
+                        onClick={() => handleTogglePaid(exp)}
+                        title={
+                          status === "paid"
+                            ? "Paid for this month — click to mark as unpaid"
+                            : status === "due"
+                            ? "Due date passed — click to mark as paid"
+                            : "Due this month — click to mark as paid"
+                        }
+                        className={`px-3 py-1 rounded-lg text-[11px] font-semibold transition cursor-pointer flex items-center gap-1.5 shadow-xs ${
+                          status === "paid"
+                            ? "bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30"
+                            : status === "due"
+                            ? "bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/35"
+                            : "bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/25"
+                        }`}
                       >
-                        ✓ Paid
+                        {status === "paid" ? (
+                          <>
+                            <span className="font-bold">✓</span>
+                            <span>Paid</span>
+                          </>
+                        ) : status === "due" ? (
+                          <>
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
+                            <span>Due</span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                            <span>Unpaid</span>
+                          </>
+                        )}
                       </button>
                       <button
                         onClick={() => handleOpenEdit(exp)}

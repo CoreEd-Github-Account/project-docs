@@ -67,6 +67,12 @@ export async function POST(request: Request) {
       amount: Number(data.amount) || 0,
       dueDate: data.dueDate.slice(0, 10),
       isPaid: Boolean(data.isPaid),
+      paidMonth:
+        data.paidMonth !== undefined
+          ? data.paidMonth
+          : data.isPaid
+          ? data.dueDate.slice(0, 7)
+          : null,
       createdAt: data.createdAt || Date.now(),
       userId: auth.user.id,
     };

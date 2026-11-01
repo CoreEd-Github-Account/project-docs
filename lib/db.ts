@@ -2922,6 +2922,46 @@ export async function getCommands(userId: string): Promise<SavedCommand[]> {
   }));
 }
 
+export async function getCommandById(id: string): Promise<SavedCommand | null> {
+  await ensureCommandsTableExists();
+  const pool = getPool();
+  const { rows } = await pool.query<{
+    id: string;
+    title: string | null;
+    command: string;
+    category: string | null;
+    is_pinned: boolean | null;
+    created_at: Date | string;
+    updated_at: Date | string | null;
+    user_id: string;
+  }>(
+    "SELECT id, title, command, category, is_pinned, created_at, updated_at, user_id FROM saved_commands WHERE id = $1 LIMIT 1",
+    [id]
+  );
+
+  if (rows.length === 0) return null;
+  const row = rows[0];
+
+  return {
+    id: row.id,
+    title: row.title || "",
+    command: row.command,
+    category: row.category || "github",
+    isPinned: Boolean(row.is_pinned),
+    createdAt:
+      row.created_at instanceof Date
+        ? row.created_at.toISOString()
+        : String(row.created_at || new Date().toISOString()),
+    updatedAt:
+      row.updated_at instanceof Date
+        ? row.updated_at.toISOString()
+        : row.updated_at
+        ? String(row.updated_at)
+        : undefined,
+    userId: row.user_id,
+  };
+}
+
 export async function saveCommand(
   item: {
     id: string;
@@ -3000,6 +3040,7 @@ export async function ensureMonthlyExpensesTableExists(): Promise<void> {
     );
     ALTER TABLE monthly_expenses DROP COLUMN IF EXISTS notes;
     ALTER TABLE monthly_expenses ALTER COLUMN category SET DEFAULT 'anonymous';
+    ALTER TABLE monthly_expenses ADD COLUMN IF NOT EXISTS paid_month TEXT;
     CREATE INDEX IF NOT EXISTS idx_monthly_expenses_user_id ON monthly_expenses(user_id);
     CREATE INDEX IF NOT EXISTS idx_monthly_expenses_due_date ON monthly_expenses(due_date);
 
@@ -3055,9 +3096,10 @@ export async function getAllMonthlyExpenses(userId: string): Promise<MonthlyExpe
     amount: string | number;
     due_date: string;
     is_paid: boolean | null;
+    paid_month: string | null;
     created_at: string | number;
   }>(
-    "SELECT id, user_id, name, category, amount, due_date, is_paid, created_at FROM monthly_expenses WHERE user_id = $1 ORDER BY is_paid ASC, due_date ASC, created_at DESC",
+    "SELECT id, user_id, name, category, amount, due_date, is_paid, paid_month, created_at FROM monthly_expenses WHERE user_id = $1 ORDER BY is_paid ASC, due_date ASC, created_at DESC",
     [userId]
   );
 
@@ -3069,6 +3111,7 @@ export async function getAllMonthlyExpenses(userId: string): Promise<MonthlyExpe
     amount: Number(row.amount) || 0,
     dueDate: row.due_date,
     isPaid: Boolean(row.is_paid),
+    paidMonth: row.paid_month || (row.is_paid ? row.due_date.slice(0, 7) : null),
     createdAt: Number(row.created_at) || Date.now(),
   }));
 }
@@ -3088,14 +3131,15 @@ export async function saveMonthlyExpense(
 
   await pool.query(
     `
-    INSERT INTO monthly_expenses (id, user_id, name, category, amount, due_date, is_paid, created_at)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    INSERT INTO monthly_expenses (id, user_id, name, category, amount, due_date, is_paid, paid_month, created_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
     ON CONFLICT (id) DO UPDATE SET
       name = EXCLUDED.name,
       category = EXCLUDED.category,
       amount = EXCLUDED.amount,
       due_date = EXCLUDED.due_date,
       is_paid = EXCLUDED.is_paid,
+      paid_month = EXCLUDED.paid_month,
       user_id = COALESCE(monthly_expenses.user_id, EXCLUDED.user_id)
     `,
     [
@@ -3106,6 +3150,7 @@ export async function saveMonthlyExpense(
       expense.amount,
       expense.dueDate,
       Boolean(expense.isPaid),
+      expense.paidMonth || (expense.isPaid ? expense.dueDate.slice(0, 7) : null),
       createdAt,
     ]
   );

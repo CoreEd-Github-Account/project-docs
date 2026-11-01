@@ -221,6 +221,8 @@ export default function CommandsPage() {
   const [isSeeding, setIsSeeding] = useState(false);
 
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [sharedId, setSharedId] = useState<string | null>(null);
+  const [importNotice, setImportNotice] = useState<string | null>(null);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -417,6 +419,35 @@ export default function CommandsPage() {
     if (activeCategory.toLowerCase() === envId.toLowerCase()) {
       setActiveCategory("all");
     }
+  };
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("imported")) {
+        setImportNotice("✓ Shared command successfully saved to your collection!");
+        setTimeout(() => setImportNotice(null), 4000);
+        window.history.replaceState({}, "", "/commands");
+      }
+    }
+  }, []);
+
+  const handleShareCommand = (id: string) => {
+    const shareUrl = `${window.location.origin}/commands/share/${encodeURIComponent(id)}`;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(shareUrl);
+    } else {
+      const el = document.createElement("textarea");
+      el.value = shareUrl;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand("copy");
+      document.body.removeChild(el);
+    }
+    setSharedId(id);
+    setTimeout(() => {
+      setSharedId((cur) => (cur === id ? null : cur));
+    }, 2000);
   };
 
   const handleCopyCommand = (id: string, cmdText: string) => {
@@ -635,6 +666,19 @@ export default function CommandsPage() {
       />
 
       <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 py-8 space-y-5">
+        {/* Import notification banner */}
+        {importNotice && (
+          <div className="bg-emerald-950/40 border border-emerald-500/30 text-emerald-300 px-4 py-2.5 rounded-xl text-xs font-semibold flex items-center justify-between shadow-lg">
+            <span>{importNotice}</span>
+            <button
+              onClick={() => setImportNotice(null)}
+              className="text-emerald-400 hover:text-white text-xs cursor-pointer ml-3"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         {/* Minimal Single-Row Header: Title + Search */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
@@ -771,7 +815,7 @@ export default function CommandsPage() {
             </div>
           </div>
         ) : (
-          <div className="rounded-2xl bg-[#0d1017] border border-white/[0.07] divide-y divide-white/[0.06] overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.6)]">
+          <div className="space-y-3.5">
             {filteredCommands.map((item) => {
               const cat = resolveCategoryMeta(item.category, allCategories);
               const isCopied = copiedId === item.id;
@@ -779,7 +823,7 @@ export default function CommandsPage() {
               return (
                 <div
                   key={item.id}
-                  className="group p-4 hover:bg-white/[0.015] transition-colors space-y-2"
+                  className="group bg-[#0d1017] border border-white/[0.07] hover:border-white/[0.15] rounded-2xl p-4 sm:p-4.5 transition-all shadow-[0_10px_30px_rgba(0,0,0,0.35)] space-y-2.5"
                 >
                   {/* Command Strip + Controls */}
                   <div className="flex items-center justify-between gap-3">
@@ -810,6 +854,26 @@ export default function CommandsPage() {
                         }`}
                       >
                         {isCopied ? "✓ Copied" : "Copy"}
+                      </button>
+
+                      <button
+                        onClick={() => handleShareCommand(item.id)}
+                        title="Copy public share link (auto-saves to recipient's account)"
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition flex items-center gap-1.5 cursor-pointer ${
+                          sharedId === item.id
+                            ? "bg-blue-500/20 text-blue-300 border border-blue-500/30"
+                            : "bg-white/[0.05] hover:bg-white/[0.1] text-slate-200 border border-white/[0.08]"
+                        }`}
+                      >
+                        <svg className="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="2"
+                            d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
+                          />
+                        </svg>
+                        <span>{sharedId === item.id ? "✓ Copied Link" : "Share"}</span>
                       </button>
 
                       <button
