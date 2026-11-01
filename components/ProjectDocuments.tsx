@@ -747,10 +747,10 @@ export function ProjectDocuments({
               <button
                 type="button"
                 onClick={() => setShowNewFolderInput((prev) => !prev)}
-                className="px-3 py-1.5 rounded-xl bg-[#10131c] hover:bg-white/[0.07] text-slate-200 hover:text-white border border-white/[0.08] text-xs font-medium transition flex items-center gap-1.5 cursor-pointer"
+                className="px-3 py-1.5 rounded-xl bg-amber-500/[0.08] hover:bg-amber-500/[0.15] text-amber-200 hover:text-amber-100 border border-amber-500/25 text-xs font-medium transition flex items-center gap-1.5 cursor-pointer"
               >
                 <svg
-                  className="w-3.5 h-3.5 text-slate-400"
+                  className="w-3.5 h-3.5 text-amber-400"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -816,7 +816,7 @@ export function ProjectDocuments({
       {showNewFolderInput && !isReadOnly && (
         <form
           onSubmit={handleCreateFolder}
-          className="p-2.5 rounded-xl bg-[#0d1017] border border-white/[0.1] flex items-center gap-2"
+          className="p-2.5 rounded-xl bg-amber-500/[0.05] border border-amber-500/25 flex items-center gap-2 mb-3"
         >
           <input
             type="text"
@@ -824,7 +824,7 @@ export function ProjectDocuments({
             onChange={(e) => setNewFolderName(e.target.value)}
             placeholder="New folder name..."
             autoFocus
-            className="flex-1 px-3 py-1.5 rounded-lg bg-[#07090e] border border-white/[0.08] text-white text-xs focus:outline-none focus:border-white/30"
+            className="flex-1 px-3 py-1.5 rounded-lg bg-[#07090e] border border-amber-500/30 text-white text-xs focus:outline-none focus:border-amber-400"
           />
           <button
             type="button"
@@ -839,48 +839,21 @@ export function ProjectDocuments({
           <button
             type="submit"
             disabled={isCreatingFolder || !newFolderName.trim()}
-            className="px-3.5 py-1.5 rounded-lg bg-white hover:bg-slate-200 text-slate-950 text-xs font-semibold transition disabled:opacity-50 cursor-pointer"
+            className="px-3.5 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-semibold transition disabled:opacity-50 cursor-pointer"
           >
             {isCreatingFolder ? "..." : "Create"}
           </button>
         </form>
       )}
 
-      {/* FOLDERS ROW (Monochrome & Clean) */}
+      {/* FOLDERS ROW / AREA (Highlighted & Subtle Yellow Color) */}
       {folders.length > 0 && (
-        <div className="flex items-center gap-2 flex-wrap">
-          <button
-            type="button"
-            onClick={() => setActiveFolderId(null)}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-medium transition cursor-pointer ${
-              activeFolderId === null
-                ? "bg-white/[0.1] border-white/[0.2] text-white"
-                : "bg-[#0d1017] border-white/[0.07] text-slate-400 hover:text-slate-200"
-            }`}
-          >
-            <span>All Files</span>
-            <span className="font-mono text-[10px] opacity-70">
-              {documents.length}
-            </span>
-          </button>
-
-          {folders.map((folder) => {
-            const isSelected = activeFolderId === folder.id;
-            const count = folderCounts[folder.id] || 0;
-            return (
-              <div
-                key={folder.id}
-                onClick={() =>
-                  setActiveFolderId(isSelected ? null : folder.id)
-                }
-                className={`group flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-medium transition cursor-pointer select-none ${
-                  isSelected
-                    ? "bg-white/[0.1] border-white/[0.22] text-white"
-                    : "bg-[#0d1017] border-white/[0.07] text-slate-300 hover:border-white/[0.14] hover:text-white"
-                }`}
-              >
+        <div className="p-3.5 sm:p-4 rounded-2xl bg-amber-500/[0.04] border border-amber-500/15 shadow-[0_4px_20px_rgba(0,0,0,0.18)] mb-6 flex flex-col gap-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
                 <svg
-                  className="w-3.5 h-3.5 text-slate-400 shrink-0"
+                  className="w-3.5 h-3.5 text-amber-400"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -888,30 +861,101 @@ export function ProjectDocuments({
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    strokeWidth={1.8}
+                    strokeWidth={2}
                     d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
                   />
                 </svg>
-                <span className="truncate max-w-[140px]">{folder.name}</span>
-                <span className="font-mono text-[10px] text-slate-500">
-                  {count}
+                Folders
+              </span>
+              <span className="px-1.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/25 text-[10px] font-mono font-medium text-amber-300">
+                {folders.length}
+              </span>
+            </div>
+            {activeFolder && (
+              <span className="text-[11px] text-amber-300/80 font-mono">
+                Active:{" "}
+                <span className="text-amber-200 font-semibold">
+                  {activeFolder.name}
                 </span>
-                {canDelete && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setFolderToDelete(folder);
-                    }}
-                    title="Delete folder"
-                    className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-rose-400 transition cursor-pointer"
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setActiveFolderId(null)}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-medium transition cursor-pointer ${
+                activeFolderId === null
+                  ? "bg-amber-500/20 border-amber-500/40 text-amber-100 shadow-[0_0_12px_rgba(245,158,11,0.15)]"
+                  : "bg-[#0d1017] border-white/[0.08] text-slate-400 hover:text-slate-200 hover:border-white/[0.15]"
+              }`}
+            >
+              <span>All Files</span>
+              <span className="font-mono text-[10px] opacity-75">
+                {documents.length}
+              </span>
+            </button>
+
+            {folders.map((folder) => {
+              const isSelected = activeFolderId === folder.id;
+              const count = folderCounts[folder.id] || 0;
+              return (
+                <div
+                  key={folder.id}
+                  onClick={() =>
+                    setActiveFolderId(isSelected ? null : folder.id)
+                  }
+                  className={`group flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-medium transition cursor-pointer select-none ${
+                    isSelected
+                      ? "bg-amber-500/25 border-amber-500/50 text-amber-100 shadow-[0_0_15px_rgba(245,158,11,0.22)]"
+                      : "bg-amber-500/[0.07] border-amber-500/20 text-amber-200/90 hover:bg-amber-500/[0.14] hover:border-amber-500/35 hover:text-amber-100"
+                  }`}
+                >
+                  <svg
+                    className={`w-3.5 h-3.5 shrink-0 transition-colors ${
+                      isSelected
+                        ? "text-amber-300"
+                        : "text-amber-400/80 group-hover:text-amber-300"
+                    }`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
                   >
-                    ✕
-                  </button>
-                )}
-              </div>
-            );
-          })}
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={1.8}
+                      d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+                    />
+                  </svg>
+                  <span className="truncate max-w-[140px]">{folder.name}</span>
+                  <span
+                    className={`font-mono text-[10px] ${
+                      isSelected
+                        ? "text-amber-300 font-semibold"
+                        : "text-amber-400/70"
+                    }`}
+                  >
+                    {count}
+                  </span>
+                  {canDelete && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setFolderToDelete(folder);
+                      }}
+                      title="Delete folder"
+                      className="opacity-0 group-hover:opacity-100 text-amber-400/60 hover:text-rose-400 transition cursor-pointer"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -1166,7 +1210,20 @@ export function ProjectDocuments({
                             ))}
                           </select>
                         ) : doc.folderId && folderMap.get(doc.folderId) ? (
-                          <span className="px-2 py-0.5 rounded-md bg-white/[0.04] text-slate-300 border border-white/[0.07] text-[11px]">
+                          <span className="px-2 py-0.5 rounded-md bg-amber-500/[0.08] text-amber-300 border border-amber-500/20 text-[11px] inline-flex items-center gap-1">
+                            <svg
+                              className="w-3 h-3 text-amber-400 shrink-0"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={1.8}
+                                d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+                              />
+                            </svg>
                             {folderMap.get(doc.folderId)}
                           </span>
                         ) : (
@@ -1275,7 +1332,20 @@ export function ProjectDocuments({
                         {isMd ? "MD" : "TXT"}
                       </span>
                       {doc.folderId && folderMap.get(doc.folderId) && (
-                        <span className="text-[10px] text-slate-400 bg-white/[0.04] px-2 py-0.5 rounded-md border border-white/[0.06]">
+                        <span className="text-[10px] text-amber-300 bg-amber-500/[0.08] px-2 py-0.5 rounded-md border border-amber-500/20 inline-flex items-center gap-1">
+                          <svg
+                            className="w-2.5 h-2.5 text-amber-400 shrink-0"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={1.8}
+                              d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+                            />
+                          </svg>
                           {folderMap.get(doc.folderId)}
                         </span>
                       )}
