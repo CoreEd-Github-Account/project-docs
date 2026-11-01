@@ -296,3 +296,13 @@ export interface MonthlyExpense {
 }
 
 
+
+export interface ImportantNote {
+  id: string;
+  heading: string;
+  description?: string;
+  text: string;
+  createdAt: string;
+  updatedAt?: string;
+  userId?: string;
+}

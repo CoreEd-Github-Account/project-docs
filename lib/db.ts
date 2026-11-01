@@ -26,6 +26,7 @@ import type {
   DocumentType,
   SavedCommand,
   MonthlyExpense,
+  ImportantNote,
 } from "./types";
 
 let poolInstance: Pool | null = null;
@@ -44,6 +45,7 @@ let documentsInitialized = false;
 let bulkOpenersInitialized = false;
 let commandsInitialized = false;
 let monthlyExpensesInitialized = false;
+let importantNotesInitialized = false;
 
 function resolveConnectionString(raw: string): string {
   try {
@@ -3167,3 +3169,94 @@ export async function deleteMonthlyExpense(id: string, userId: string): Promise<
 
 
 
+
+
+export async function ensureImportantNotesTableExists(): Promise<void> {
+  if (importantNotesInitialized) return;
+  const pool = getPool();
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS important_notes (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      heading TEXT NOT NULL,
+      description TEXT DEFAULT '',
+      text TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_important_notes_user_id ON important_notes(user_id);
+  `);
+  importantNotesInitialized = true;
+}
+
+export async function getImportantNotes(userId: string): Promise<ImportantNote[]> {
+  await ensureImportantNotesTableExists();
+  const pool = getPool();
+  const { rows } = await pool.query<{
+    id: string;
+    heading: string;
+    description: string | null;
+    text: string;
+    created_at: Date | string;
+    updated_at: Date | string | null;
+    user_id: string;
+  }>(
+    "SELECT id, heading, description, text, created_at, updated_at, user_id FROM important_notes WHERE user_id = $1 ORDER BY created_at DESC",
+    [userId]
+  );
+
+  return rows.map((row) => ({
+    id: row.id,
+    heading: row.heading,
+    description: row.description || "",
+    text: row.text,
+    createdAt: typeof row.created_at === "string" ? row.created_at : row.created_at.toISOString(),
+    updatedAt: row.updated_at ? (typeof row.updated_at === "string" ? row.updated_at : row.updated_at.toISOString()) : undefined,
+    userId: row.user_id,
+  }));
+}
+
+export async function saveImportantNote(
+  note: {
+    id: string;
+    heading: string;
+    description?: string;
+    text: string;
+    createdAt?: string;
+  },
+  userId: string
+): Promise<ImportantNote> {
+  await ensureImportantNotesTableExists();
+  const pool = getPool();
+  const createdAt = note.createdAt || new Date().toISOString();
+
+  await pool.query(
+    `
+    INSERT INTO important_notes (id, user_id, heading, description, text, created_at, updated_at)
+    VALUES ($1, $2, $3, $4, $5, $6, NOW())
+    ON CONFLICT (id) DO UPDATE SET
+      heading = EXCLUDED.heading,
+      description = EXCLUDED.description,
+      text = EXCLUDED.text,
+      updated_at = NOW(),
+      user_id = COALESCE(important_notes.user_id, EXCLUDED.user_id)
+    `,
+    [note.id, userId, note.heading, note.description || "", note.text, createdAt]
+  );
+
+  return {
+    id: note.id,
+    heading: note.heading,
+    description: note.description || "",
+    text: note.text,
+    createdAt,
+    updatedAt: new Date().toISOString(),
+    userId,
+  };
+}
+
+export async function deleteImportantNote(id: string, userId: string): Promise<void> {
+  await ensureImportantNotesTableExists();
+  const pool = getPool();
+  await pool.query("DELETE FROM important_notes WHERE id = $1 AND user_id = $2", [id, userId]);
+}
