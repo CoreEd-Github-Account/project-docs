@@ -487,21 +487,6 @@ export default function HomePortal() {
           45% { transform: translateX(-2px) rotate(-0.5deg); }
           60%, 99% { transform: translateX(0) rotate(0deg); }
         }
-        @keyframes sleep-breathe {
-          0%, 100% { transform: scale(1) translateY(0px); }
-          50% { transform: scale(1.06) translateY(-5px); }
-        }
-        @keyframes zzz-float {
-          0% { opacity: 0; transform: translate(0, 6px) scale(0.7); }
-          40% { opacity: 0.85; }
-          100% { opacity: 0; transform: translate(16px, -24px) scale(1.15); }
-        }
-        @keyframes vomit-shake {
-          0% { transform: scale(0.85); }
-          20% { transform: scale(1.18) rotate(-8deg); }
-          40% { transform: scale(1.14) rotate(8deg); }
-          100% { transform: scale(1) rotate(0deg); }
-        }
         @keyframes icon-spew {
           0% { opacity: 0; transform: translateY(-20px) scale(0.5); }
           75% { opacity: 1; transform: translateY(2px) scale(1.03); }
@@ -926,7 +911,7 @@ export default function HomePortal() {
       </header>
 
       {/* CENTER HUB: Minimal Clock + Weather & Playful Emoji Launcher */}
-      <main className="flex-1 max-w-2xl w-full mx-auto px-4 flex flex-col items-center justify-center gap-3.5 sm:gap-4.5 py-1 z-10 lg:-mt-36 xl:-mt-40">
+      <main className="flex-1 max-w-2xl w-full mx-auto px-4 flex flex-col items-center justify-start pt-8 sm:pt-12 lg:pt-14 gap-3.5 sm:gap-4.5 z-10">
         {/* Clean Centered Time & Compact Weather Pill */}
         <div className="flex flex-col items-center text-center gap-1.5 sm:gap-2">
           <div className="text-4xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight font-mono tabular-nums drop-shadow-2xl leading-none">
@@ -955,9 +940,9 @@ export default function HomePortal() {
           </div>
         </div>
 
-        {/* PLAYFUL SLEEPING -> VOMITING EMOJI LAUNCHER */}
-        {!isWorkspaceAwake ? (
-          <div className="flex flex-col items-center justify-center py-1">
+        {/* PLAYFUL SLEEPING / AWAKE EMOJI LAUNCHER */}
+        <div className="flex flex-col items-center justify-center">
+          {!isWorkspaceAwake ? (
             <button
               type="button"
               onClick={() => setIsWorkspaceAwake(true)}
@@ -965,35 +950,14 @@ export default function HomePortal() {
               className="group relative flex items-center justify-center w-20 h-20 sm:w-22 sm:h-22 rounded-full cursor-pointer focus:outline-none"
             >
               <span className="pointer-events-none absolute inset-0 rounded-full bg-blue-500/15 blur-2xl group-hover:bg-orange-500/20 transition-all duration-300" />
-
-              <span
-                style={{ animation: "zzz-float 2.6s ease-in-out infinite" }}
-                className="pointer-events-none absolute -top-1 right-2 text-xs font-mono font-bold text-blue-300/80 group-hover:hidden"
-              >
-                z
-              </span>
-              <span
-                style={{
-                  animation: "zzz-float 2.6s ease-in-out 0.85s infinite",
-                }}
-                className="pointer-events-none absolute -top-5 -right-1 text-sm font-mono font-bold text-indigo-300/80 group-hover:hidden"
-              >
-                Z
-              </span>
-
-              <span
-                style={{ animation: "sleep-breathe 3.2s ease-in-out infinite" }}
-                className="text-5xl sm:text-6xl filter drop-shadow-[0_14px_28px_rgba(0,0,0,0.85)] group-hover:hidden transition-transform duration-200"
-              >
+              <span className="text-5xl sm:text-6xl filter drop-shadow-[0_14px_28px_rgba(0,0,0,0.85)] group-hover:hidden transition-transform duration-200">
                 😴
               </span>
-              <span className="hidden group-hover:inline-block text-5xl sm:text-6xl filter drop-shadow-[0_14px_28px_rgba(0,0,0,0.85)] scale-110 active:scale-95 transition-transform duration-200">
+              <span className="hidden group-hover:inline-block text-5xl sm:text-6xl filter drop-shadow-[0_14px_28px_rgba(0,0,0,0.85)] transition-transform duration-200">
                 🙄
               </span>
             </button>
-          </div>
-        ) : (
-          <div className="flex flex-col items-center justify-center w-full gap-3 sm:gap-4">
+          ) : (
             <button
               type="button"
               onClick={() => {
@@ -1001,20 +965,19 @@ export default function HomePortal() {
                 setActiveAccent("blue");
               }}
               title="Click to sleep"
-              style={{
-                animation:
-                  "vomit-shake 0.7s cubic-bezier(0.36, 0.07, 0.19, 0.97) both",
-              }}
-              className="group relative flex items-center justify-center cursor-pointer focus:outline-none"
+              className="group relative flex items-center justify-center w-20 h-20 sm:w-22 sm:h-22 rounded-full cursor-pointer focus:outline-none"
             >
               <span className="pointer-events-none absolute inset-0 rounded-full bg-emerald-500/20 blur-2xl" />
-              <span className="text-5xl sm:text-6xl filter drop-shadow-[0_12px_24px_rgba(0,0,0,0.85)] group-hover:scale-110 active:scale-95 transition-transform duration-200">
+              <span className="text-5xl sm:text-6xl filter drop-shadow-[0_12px_24px_rgba(0,0,0,0.85)] transition-transform duration-200">
                 🤮
               </span>
             </button>
+          )}
+        </div>
 
-            {/* Sleek Glass Workspace Dock (6 Icons + Short Titles Only) */}
-            <div className="px-5 py-3 rounded-2xl bg-[#0d1017]/85 backdrop-blur-2xl border border-white/[0.08] shadow-[0_18px_45px_rgba(0,0,0,0.7)] flex flex-wrap items-center justify-center gap-3.5 sm:gap-5 [perspective:900px]">
+        {/* Sleek Glass Workspace Dock (6 Icons + Short Titles Only) */}
+        {isWorkspaceAwake && (
+          <div className="px-5 py-3 rounded-2xl bg-[#0d1017]/85 backdrop-blur-2xl border border-white/[0.08] shadow-[0_18px_45px_rgba(0,0,0,0.7)] flex flex-wrap items-center justify-center gap-3.5 sm:gap-5 [perspective:900px]">
               {[
                 {
                   href: "/projects",
@@ -1101,7 +1064,6 @@ export default function HomePortal() {
                 </Link>
               ))}
             </div>
-          </div>
         )}
       </main>
 
