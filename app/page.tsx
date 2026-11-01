@@ -59,6 +59,14 @@ interface VulnerabilityItem {
   url: string;
 }
 
+interface AiNewsItem {
+  id: string;
+  title: string;
+  image: string;
+  url: string;
+  source: string;
+}
+
 export default function HomePortal() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [now, setNow] = useState<Date | null>(null);
@@ -76,6 +84,10 @@ export default function HomePortal() {
   const [vulnItems, setVulnItems] = useState<VulnerabilityItem[]>([]);
   const [vulnIndex, setVulnIndex] = useState(0);
   const [vulnLoading, setVulnLoading] = useState(true);
+
+  const [aiNewsItems, setAiNewsItems] = useState<AiNewsItem[]>([]);
+  const [aiNewsIndex, setAiNewsIndex] = useState(0);
+  const [aiNewsLoading, setAiNewsLoading] = useState(true);
 
   const portalRef = useRef<HTMLDivElement | null>(null);
   const [activeAccent, setActiveAccent] = useState<AccentColor>("blue");
@@ -353,6 +365,38 @@ export default function HomePortal() {
     return () => clearInterval(cycleTimer);
   }, [vulnItems.length]);
 
+  const fetchAiNews = useCallback(async () => {
+    setAiNewsLoading(true);
+    try {
+      const res = await fetch("/api/ai-news", { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.items) && data.items.length > 0) {
+          setAiNewsItems(data.items);
+          setAiNewsIndex(0);
+        }
+      }
+    } catch (err) {
+      console.error("AI news fetch error:", err);
+    } finally {
+      setAiNewsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchAiNews();
+    const aiTimer = setInterval(fetchAiNews, 15 * 60 * 1000);
+    return () => clearInterval(aiTimer);
+  }, [fetchAiNews]);
+
+  useEffect(() => {
+    if (aiNewsItems.length <= 1) return;
+    const cycleTimer = setInterval(() => {
+      setAiNewsIndex((prev) => (prev + 1) % aiNewsItems.length);
+    }, 13000);
+    return () => clearInterval(cycleTimer);
+  }, [aiNewsItems.length]);
+
   const handleLogout = async () => {
     try {
       await fetch("/api/auth", { method: "DELETE" });
@@ -465,17 +509,23 @@ export default function HomePortal() {
         }
       `}</style>
 
-      {/* TOP BAR: Left IT News | Center Dynamic Island Notch | Right Market Dock */}
-      <header className="w-full max-w-[1400px] mx-auto px-5 pt-4 flex items-start justify-between gap-4 z-30">
-        {/* TOP-LEFT: News & Vulnerability Cards */}
-        <div className="hidden lg:flex flex-col gap-2.5 min-w-[340px]">
-          {/* Card 1: IT / AI / Cybersecurity News */}
+      {/* TOP BAR: Left News Stack | Center Dynamic Island Notch | Right Market Dock */}
+      <header className="w-full max-w-[1700px] mx-auto px-3 sm:px-4 lg:pl-3 lg:pr-5 pt-3.5 flex items-start justify-between gap-3.5 z-30">
+        {/* TOP-LEFT: News, Vulnerabilities & AI Intelligence Cards */}
+        <div className="hidden lg:flex flex-col gap-2.5 min-w-[370px] max-w-[400px]">
+          {/* Card 1: Cybersecurity Events */}
           {newsLoading && newsItems.length === 0 ? (
-            <div className="flex items-center gap-3.5 px-4 py-2.5 rounded-2xl bg-[#0d1017]/85 backdrop-blur-xl border border-white/[0.07] w-[370px]">
-              <div className="w-12 h-12 rounded-xl bg-white/[0.06] animate-pulse shrink-0" />
-              <div className="flex-1 space-y-2">
-                <div className="h-3 w-full bg-white/[0.06] rounded animate-pulse" />
-                <div className="h-3 w-2/3 bg-white/[0.06] rounded animate-pulse" />
+            <div className="flex flex-col gap-2 px-4 py-3 rounded-2xl bg-[#0d1017]/90 backdrop-blur-xl border border-white/[0.07] w-[385px] min-h-[90px]">
+              <div className="flex items-center justify-between">
+                <div className="h-2.5 w-28 bg-white/[0.08] rounded animate-pulse" />
+                <div className="h-2 w-12 bg-white/[0.06] rounded animate-pulse" />
+              </div>
+              <div className="flex items-center gap-3.5">
+                <div className="w-[50px] h-[50px] rounded-xl bg-white/[0.06] animate-pulse shrink-0" />
+                <div className="flex-1 space-y-1.5">
+                  <div className="h-3 w-full bg-white/[0.06] rounded animate-pulse" />
+                  <div className="h-3 w-3/4 bg-white/[0.06] rounded animate-pulse" />
+                </div>
               </div>
             </div>
           ) : newsItems.length > 0 ? (
@@ -486,40 +536,58 @@ export default function HomePortal() {
               onClick={(e) => {
                 if (!newsItems[newsIndex]?.url) e.preventDefault();
               }}
-              className="group relative flex items-center gap-3.5 px-4 py-2.5 rounded-2xl bg-[#0d1017]/85 backdrop-blur-xl border border-white/[0.08] hover:border-white/[0.18] shadow-xl transition-all duration-200 w-[370px] cursor-pointer"
+              className="group relative flex flex-col gap-2 px-4 py-3 rounded-2xl bg-[#0d1017]/90 backdrop-blur-xl border border-white/[0.08] hover:border-cyan-500/35 shadow-xl transition-all duration-200 w-[385px] min-h-[90px] cursor-pointer"
             >
-              <img
-                src={newsItems[newsIndex].image}
-                alt=""
-                className="w-12 h-12 rounded-xl object-cover border border-white/[0.08] shrink-0 bg-slate-900 shadow-sm"
-              />
-              <p className="text-[13px] font-medium text-slate-200 group-hover:text-white leading-snug line-clamp-2 flex-1 transition-colors">
-                {newsItems[newsIndex].title}
-              </p>
-              {newsItems.length > 1 && (
-                <button
-                  type="button"
-                  aria-label="Next story"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setNewsIndex((prev) => (prev + 1) % newsItems.length);
-                  }}
-                  className="opacity-0 group-hover:opacity-100 w-7 h-7 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 hover:text-white flex items-center justify-center text-sm transition-opacity shrink-0 cursor-pointer"
-                >
-                  ›
-                </button>
-              )}
+              {/* Heading */}
+              <div className="flex items-center justify-between text-[10px] font-bold tracking-wider uppercase">
+                <div className="flex items-center gap-1.5 text-cyan-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                  <span>Cybersecurity Events</span>
+                </div>
+                <span className="text-[9px] font-mono text-slate-500 font-normal">Live Feed</span>
+              </div>
+
+              {/* Content */}
+              <div className="flex items-center gap-3.5">
+                <img
+                  src={newsItems[newsIndex].image}
+                  alt=""
+                  className="w-[50px] h-[50px] rounded-xl object-cover border border-white/[0.08] shrink-0 bg-slate-900 shadow-sm"
+                />
+                <p className="text-[12.5px] font-medium text-slate-200 group-hover:text-white leading-snug line-clamp-2 flex-1 transition-colors">
+                  {newsItems[newsIndex].title}
+                </p>
+                {newsItems.length > 1 && (
+                  <button
+                    type="button"
+                    aria-label="Next cybersecurity event"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setNewsIndex((prev) => (prev + 1) % newsItems.length);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 w-7 h-7 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 hover:text-white flex items-center justify-center text-sm transition-opacity shrink-0 cursor-pointer"
+                  >
+                    ›
+                  </button>
+                )}
+              </div>
             </a>
           ) : null}
 
           {/* Card 2: National Vulnerability Database (NVD) Latest Vulnerability */}
           {vulnLoading && vulnItems.length === 0 ? (
-            <div className="flex items-center gap-3.5 px-4 py-2.5 rounded-2xl bg-[#0d1017]/85 backdrop-blur-xl border border-white/[0.07] w-[370px]">
-              <div className="w-12 h-12 rounded-xl bg-white/[0.06] animate-pulse shrink-0" />
-              <div className="flex-1 space-y-2">
-                <div className="h-3 w-1/3 bg-white/[0.06] rounded animate-pulse" />
-                <div className="h-3 w-5/6 bg-white/[0.06] rounded animate-pulse" />
+            <div className="flex flex-col gap-2 px-4 py-3 rounded-2xl bg-[#0d1017]/90 backdrop-blur-xl border border-white/[0.07] w-[385px] min-h-[90px]">
+              <div className="flex items-center justify-between">
+                <div className="h-2.5 w-24 bg-white/[0.08] rounded animate-pulse" />
+                <div className="h-2 w-16 bg-white/[0.06] rounded animate-pulse" />
+              </div>
+              <div className="flex items-center gap-3.5">
+                <div className="w-[50px] h-[50px] rounded-xl bg-white/[0.06] animate-pulse shrink-0" />
+                <div className="flex-1 space-y-1.5">
+                  <div className="h-3 w-full bg-white/[0.06] rounded animate-pulse" />
+                  <div className="h-3 w-3/4 bg-white/[0.06] rounded animate-pulse" />
+                </div>
               </div>
             </div>
           ) : vulnItems.length > 0 ? (
@@ -530,48 +598,20 @@ export default function HomePortal() {
               onClick={(e) => {
                 if (!vulnItems[vulnIndex]?.url) e.preventDefault();
               }}
-              className="group relative flex items-center gap-3.5 px-4 py-2.5 rounded-2xl bg-[#0d1017]/85 backdrop-blur-xl border border-white/[0.08] hover:border-rose-500/35 shadow-xl transition-all duration-200 w-[370px] cursor-pointer"
+              className="group relative flex flex-col gap-2 px-4 py-3 rounded-2xl bg-[#0d1017]/90 backdrop-blur-xl border border-white/[0.08] hover:border-rose-500/35 shadow-xl transition-all duration-200 w-[385px] min-h-[90px] cursor-pointer"
             >
-              {/* Security Shield / Score Badge */}
-              <div
-                className={`w-12 h-12 rounded-xl border shrink-0 flex flex-col items-center justify-center transition-colors shadow-sm ${
-                  vulnItems[vulnIndex].severity === "CRITICAL"
-                    ? "bg-rose-500/15 border-rose-500/40 text-rose-400"
-                    : vulnItems[vulnIndex].severity === "HIGH"
-                    ? "bg-orange-500/15 border-orange-500/40 text-orange-400"
-                    : vulnItems[vulnIndex].severity === "MEDIUM"
-                    ? "bg-amber-500/15 border-amber-500/40 text-amber-400"
-                    : "bg-blue-500/15 border-blue-500/40 text-blue-400"
-                }`}
-              >
-                <svg
-                  className="w-5 h-5 mb-0.5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={1.8}
-                    d="M12 9v3.75m0-10.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285zM12 16.5h.008v.008H12v-.008z"
-                  />
-                </svg>
-                <span className="text-[9px] font-mono font-black tracking-tight leading-none uppercase">
-                  {vulnItems[vulnIndex].score !== null
-                    ? vulnItems[vulnIndex].score
-                    : "NVD"}
-                </span>
-              </div>
-
-              {/* CVE Details */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5 mb-0.5">
-                  <span className="text-[11px] font-mono font-bold text-slate-300 tracking-tight">
+              {/* Heading */}
+              <div className="flex items-center justify-between text-[10px] font-bold tracking-wider uppercase">
+                <div className="flex items-center gap-1.5 text-rose-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse" />
+                  <span>CVE Vulnerability</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[9.5px] font-mono font-bold text-slate-300">
                     {vulnItems[vulnIndex].cveId}
                   </span>
                   <span
-                    className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded leading-none ${
+                    className={`text-[8.5px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded leading-none ${
                       vulnItems[vulnIndex].severity === "CRITICAL"
                         ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
                         : vulnItems[vulnIndex].severity === "HIGH"
@@ -584,26 +624,124 @@ export default function HomePortal() {
                     {vulnItems[vulnIndex].severity}
                   </span>
                 </div>
-                <p className="text-[12px] font-medium text-slate-200 group-hover:text-white leading-snug line-clamp-2 transition-colors">
-                  {vulnItems[vulnIndex].title}
-                </p>
               </div>
 
-              {/* Next Vulnerability Button */}
-              {vulnItems.length > 1 && (
-                <button
-                  type="button"
-                  aria-label="Next vulnerability"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setVulnIndex((prev) => (prev + 1) % vulnItems.length);
-                  }}
-                  className="opacity-0 group-hover:opacity-100 w-7 h-7 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 hover:text-white flex items-center justify-center text-sm transition-opacity shrink-0 cursor-pointer"
+              {/* Content */}
+              <div className="flex items-center gap-3.5">
+                <div
+                  className={`w-[50px] h-[50px] rounded-xl border shrink-0 flex flex-col items-center justify-center transition-colors shadow-sm ${
+                    vulnItems[vulnIndex].severity === "CRITICAL"
+                      ? "bg-rose-500/15 border-rose-500/40 text-rose-400"
+                      : vulnItems[vulnIndex].severity === "HIGH"
+                      ? "bg-orange-500/15 border-orange-500/40 text-orange-400"
+                      : vulnItems[vulnIndex].severity === "MEDIUM"
+                      ? "bg-amber-500/15 border-amber-500/40 text-amber-400"
+                      : "bg-blue-500/15 border-blue-500/40 text-blue-400"
+                  }`}
                 >
-                  ›
-                </button>
-              )}
+                  <svg
+                    className="w-5 h-5 mb-0.5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={1.8}
+                      d="M12 9v3.75m0-10.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285zM12 16.5h.008v.008H12v-.008z"
+                    />
+                  </svg>
+                  <span className="text-[9px] font-mono font-black tracking-tight leading-none uppercase">
+                    {vulnItems[vulnIndex].score !== null
+                      ? vulnItems[vulnIndex].score
+                      : "NVD"}
+                  </span>
+                </div>
+
+                <p className="text-[12.5px] font-medium text-slate-200 group-hover:text-white leading-snug line-clamp-2 flex-1 transition-colors">
+                  {vulnItems[vulnIndex].title}
+                </p>
+
+                {vulnItems.length > 1 && (
+                  <button
+                    type="button"
+                    aria-label="Next vulnerability"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setVulnIndex((prev) => (prev + 1) % vulnItems.length);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 w-7 h-7 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 hover:text-white flex items-center justify-center text-sm transition-opacity shrink-0 cursor-pointer"
+                  >
+                    ›
+                  </button>
+                )}
+              </div>
+            </a>
+          ) : null}
+
+          {/* Card 3: Global AI News (NewsAPI.ai) */}
+          {aiNewsLoading && aiNewsItems.length === 0 ? (
+            <div className="flex flex-col gap-2 px-4 py-3 rounded-2xl bg-[#0d1017]/90 backdrop-blur-xl border border-white/[0.07] w-[385px] min-h-[90px]">
+              <div className="flex items-center justify-between">
+                <div className="h-2.5 w-24 bg-white/[0.08] rounded animate-pulse" />
+                <div className="h-2 w-14 bg-white/[0.06] rounded animate-pulse" />
+              </div>
+              <div className="flex items-center gap-3.5">
+                <div className="w-[50px] h-[50px] rounded-xl bg-white/[0.06] animate-pulse shrink-0" />
+                <div className="flex-1 space-y-1.5">
+                  <div className="h-3 w-full bg-white/[0.06] rounded animate-pulse" />
+                  <div className="h-3 w-3/4 bg-white/[0.06] rounded animate-pulse" />
+                </div>
+              </div>
+            </div>
+          ) : aiNewsItems.length > 0 ? (
+            <a
+              href={aiNewsItems[aiNewsIndex]?.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => {
+                if (!aiNewsItems[aiNewsIndex]?.url) e.preventDefault();
+              }}
+              className="group relative flex flex-col gap-2 px-4 py-3 rounded-2xl bg-[#0d1017]/90 backdrop-blur-xl border border-white/[0.08] hover:border-purple-500/35 shadow-xl transition-all duration-200 w-[385px] min-h-[90px] cursor-pointer"
+            >
+              {/* Heading */}
+              <div className="flex items-center justify-between text-[10px] font-bold tracking-wider uppercase">
+                <div className="flex items-center gap-1.5 text-purple-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />
+                  <span>Global AI News</span>
+                </div>
+                <span className="text-[9px] font-mono text-purple-300/80 bg-purple-500/15 border border-purple-500/25 px-1.5 py-0.2 rounded">
+                  {aiNewsItems[aiNewsIndex].source || "NewsAPI.ai"}
+                </span>
+              </div>
+
+              {/* Content */}
+              <div className="flex items-center gap-3.5">
+                <img
+                  src={aiNewsItems[aiNewsIndex].image}
+                  alt=""
+                  className="w-[50px] h-[50px] rounded-xl object-cover border border-white/[0.08] shrink-0 bg-slate-900 shadow-sm"
+                />
+                <p className="text-[12.5px] font-medium text-slate-200 group-hover:text-white leading-snug line-clamp-2 flex-1 transition-colors">
+                  {aiNewsItems[aiNewsIndex].title}
+                </p>
+                {aiNewsItems.length > 1 && (
+                  <button
+                    type="button"
+                    aria-label="Next AI news story"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setAiNewsIndex((prev) => (prev + 1) % aiNewsItems.length);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 w-7 h-7 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 hover:text-white flex items-center justify-center text-sm transition-opacity shrink-0 cursor-pointer"
+                  >
+                    ›
+                  </button>
+                )}
+              </div>
             </a>
           ) : null}
         </div>

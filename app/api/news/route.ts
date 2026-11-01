@@ -5,7 +5,7 @@ export interface TechNewsItem {
   title: string;
   image: string;
   url: string;
-  category: "Cybersecurity" | "AI Agents" | "IT & Cloud";
+  category: "Cybersecurity";
 }
 
 function decodeHtmlEntities(str: string): string {
@@ -22,8 +22,8 @@ function decodeHtmlEntities(str: string): string {
     .trim();
 }
 
-// 1. Fetch Cybersecurity & Hacker Attack news from The Hacker News RSS (includes <enclosure> images)
-async function fetchHackerNewsSecurity(): Promise<TechNewsItem[]> {
+// Fetch live Cybersecurity Events & Threats from The Hacker News RSS
+async function fetchCybersecurityEvents(): Promise<TechNewsItem[]> {
   try {
     const res = await fetch("https://feeds.feedburner.com/TheHackersNews", {
       headers: {
@@ -38,7 +38,7 @@ async function fetchHackerNewsSecurity(): Promise<TechNewsItem[]> {
     const itemRegex = /<item>([\s\S]*?)<\/item>/g;
     let match: RegExpExecArray | null;
 
-    while ((match = itemRegex.exec(xml)) !== null && items.length < 6) {
+    while ((match = itemRegex.exec(xml)) !== null && items.length < 15) {
       const block = match[1];
       const titleMatch = block.match(/<title>([\s\S]*?)<\/title>/i);
       const linkMatch = block.match(/<link>([\s\S]*?)<\/link>/i);
@@ -47,11 +47,14 @@ async function fetchHackerNewsSecurity(): Promise<TechNewsItem[]> {
 
       const title = titleMatch ? decodeHtmlEntities(titleMatch[1]) : "";
       const url = linkMatch ? decodeHtmlEntities(linkMatch[1]) : "";
-      const image = enclosureMatch?.[1] || mediaMatch?.[1] || "";
+      const image =
+        enclosureMatch?.[1] ||
+        mediaMatch?.[1] ||
+        "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=400&auto=format&fit=crop&q=80";
 
-      if (title && url && image) {
+      if (title && url) {
         items.push({
-          id: `thn-${items.length}-${url.slice(-12)}`,
+          id: `cyber-${items.length}-${url.slice(-12)}`,
           title,
           image,
           url,
@@ -65,81 +68,21 @@ async function fetchHackerNewsSecurity(): Promise<TechNewsItem[]> {
   }
 }
 
-// 2. Fetch AI Agents & IT news from Dev.to public JSON API (includes cover_image / social_image)
-async function fetchAiAndItNews(): Promise<TechNewsItem[]> {
-  try {
-    const [aiRes, secRes] = await Promise.all([
-      fetch("https://dev.to/api/articles?tag=ai&top=1&per_page=5", {
-        cache: "no-store",
-      }),
-      fetch("https://dev.to/api/articles?tag=cybersecurity&top=2&per_page=4", {
-        cache: "no-store",
-      }),
-    ]);
-
-    const items: TechNewsItem[] = [];
-
-    if (aiRes.ok) {
-      const aiArticles = await aiRes.json();
-      if (Array.isArray(aiArticles)) {
-        for (const a of aiArticles) {
-          const img = a.cover_image || a.social_image;
-          if (a.title && a.url && img) {
-            items.push({
-              id: `dev-ai-${a.id}`,
-              title: String(a.title).trim(),
-              image: String(img),
-              url: String(a.url),
-              category: "AI Agents",
-            });
-          }
-        }
-      }
-    }
-
-    if (secRes.ok) {
-      const secArticles = await secRes.json();
-      if (Array.isArray(secArticles)) {
-        for (const a of secArticles) {
-          const img = a.cover_image || a.social_image;
-          if (a.title && a.url && img) {
-            items.push({
-              id: `dev-sec-${a.id}`,
-              title: String(a.title).trim(),
-              image: String(img),
-              url: String(a.url),
-              category: "Cybersecurity",
-            });
-          }
-        }
-      }
-    }
-
-    return items;
-  } catch {
-    return [];
-  }
-}
-
 export async function GET(request: Request) {
   void request.url;
 
-  const [securityItems, aiItems] = await Promise.all([
-    fetchHackerNewsSecurity(),
-    fetchAiAndItNews(),
-  ]);
-
-  // Interleave Cybersecurity/Hacker Attacks and AI Agents/IT articles for a balanced feed
-  const combined: TechNewsItem[] = [];
-  const maxLen = Math.max(securityItems.length, aiItems.length);
-  for (let i = 0; i < maxLen; i++) {
-    if (securityItems[i]) combined.push(securityItems[i]);
-    if (aiItems[i]) combined.push(aiItems[i]);
-  }
+  const items = await fetchCybersecurityEvents();
 
   return NextResponse.json({
-    items: combined.slice(0, 10),
+    items: items.length > 0 ? items : [
+      {
+        id: "cyber-default-1",
+        title: "Critical Infrastructure Security & Global Cyber Attack Monitoring",
+        image: "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=400&auto=format&fit=crop&q=80",
+        url: "https://thehackernews.com",
+        category: "Cybersecurity" as const,
+      }
+    ],
     updatedAt: new Date().toISOString(),
   });
 }
-
