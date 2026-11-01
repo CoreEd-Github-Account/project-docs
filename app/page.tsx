@@ -456,7 +456,7 @@ export default function HomePortal() {
           "--accent-rgb": accentRgb,
         } as React.CSSProperties
       }
-      className="relative min-h-screen bg-[#07090e] text-slate-100 font-sans flex flex-col justify-between overflow-x-hidden select-none"
+      className="relative h-screen max-h-screen bg-[#07090e] text-slate-100 font-sans flex flex-col justify-between overflow-hidden select-none"
     >
       {/* Ambient Background */}
       <div className="fixed inset-0 pointer-events-none -z-10 overflow-hidden">
@@ -510,21 +510,21 @@ export default function HomePortal() {
       `}</style>
 
       {/* TOP BAR: Left News Stack | Center Dynamic Island Notch | Right Market Dock */}
-      <header className="w-full max-w-[1700px] mx-auto px-3 sm:px-4 lg:pl-3 lg:pr-5 pt-3.5 flex items-start justify-between gap-3.5 z-30">
+      <header className="relative w-full max-w-[1700px] mx-auto px-3 sm:px-4 lg:pl-3 lg:pr-5 pt-2.5 flex items-start justify-between gap-3.5 z-30 pointer-events-none">
         {/* TOP-LEFT: News, Vulnerabilities & AI Intelligence Cards */}
-        <div className="hidden lg:flex flex-col gap-2.5 min-w-[370px] max-w-[400px]">
+        <div className="hidden lg:flex flex-col gap-2 w-[340px] xl:w-[365px] pointer-events-auto">
           {/* Card 1: Cybersecurity Events */}
           {newsLoading && newsItems.length === 0 ? (
-            <div className="flex flex-col gap-2 px-4 py-3 rounded-2xl bg-[#0d1017]/90 backdrop-blur-xl border border-white/[0.07] w-[385px] min-h-[90px]">
+            <div className="flex flex-col gap-1.5 px-3.5 py-2 rounded-2xl bg-[#0d1017]/90 backdrop-blur-xl border border-white/[0.07] min-h-[76px]">
               <div className="flex items-center justify-between">
-                <div className="h-2.5 w-28 bg-white/[0.08] rounded animate-pulse" />
-                <div className="h-2 w-12 bg-white/[0.06] rounded animate-pulse" />
+                <div className="h-2 w-24 bg-white/[0.08] rounded animate-pulse" />
+                <div className="h-2 w-10 bg-white/[0.06] rounded animate-pulse" />
               </div>
-              <div className="flex items-center gap-3.5">
-                <div className="w-[50px] h-[50px] rounded-xl bg-white/[0.06] animate-pulse shrink-0" />
-                <div className="flex-1 space-y-1.5">
-                  <div className="h-3 w-full bg-white/[0.06] rounded animate-pulse" />
-                  <div className="h-3 w-3/4 bg-white/[0.06] rounded animate-pulse" />
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-xl bg-white/[0.06] animate-pulse shrink-0" />
+                <div className="flex-1 space-y-1">
+                  <div className="h-2.5 w-full bg-white/[0.06] rounded animate-pulse" />
+                  <div className="h-2.5 w-3/4 bg-white/[0.06] rounded animate-pulse" />
                 </div>
               </div>
             </div>
@@ -536,25 +536,25 @@ export default function HomePortal() {
               onClick={(e) => {
                 if (!newsItems[newsIndex]?.url) e.preventDefault();
               }}
-              className="group relative flex flex-col gap-2 px-4 py-3 rounded-2xl bg-[#0d1017]/90 backdrop-blur-xl border border-white/[0.08] hover:border-cyan-500/35 shadow-xl transition-all duration-200 w-[385px] min-h-[90px] cursor-pointer"
+              className="group relative flex flex-col gap-1.5 px-3.5 py-2 rounded-2xl bg-[#0d1017]/90 backdrop-blur-xl border border-white/[0.08] hover:border-cyan-500/35 shadow-xl transition-all duration-200 min-h-[76px] cursor-pointer"
             >
               {/* Heading */}
-              <div className="flex items-center justify-between text-[10px] font-bold tracking-wider uppercase">
+              <div className="flex items-center justify-between text-[9.5px] font-bold tracking-wider uppercase">
                 <div className="flex items-center gap-1.5 text-cyan-400">
                   <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
                   <span>Cybersecurity Events</span>
                 </div>
-                <span className="text-[9px] font-mono text-slate-500 font-normal">Live Feed</span>
+                <span className="text-[8.5px] font-mono text-slate-500 font-normal">Live Feed</span>
               </div>
 
               {/* Content */}
-              <div className="flex items-center gap-3.5">
+              <div className="flex items-center gap-3">
                 <img
                   src={newsItems[newsIndex].image}
                   alt=""
-                  className="w-[50px] h-[50px] rounded-xl object-cover border border-white/[0.08] shrink-0 bg-slate-900 shadow-sm"
+                  className="w-11 h-11 rounded-xl object-cover border border-white/[0.08] shrink-0 bg-slate-900 shadow-sm"
                 />
-                <p className="text-[12.5px] font-medium text-slate-200 group-hover:text-white leading-snug line-clamp-2 flex-1 transition-colors">
+                <p className="text-[12px] font-medium text-slate-200 group-hover:text-white leading-snug line-clamp-2 flex-1 transition-colors">
                   {newsItems[newsIndex].title}
                 </p>
                 {newsItems.length > 1 && (
@@ -566,7 +566,7 @@ export default function HomePortal() {
                       e.stopPropagation();
                       setNewsIndex((prev) => (prev + 1) % newsItems.length);
                     }}
-                    className="opacity-0 group-hover:opacity-100 w-7 h-7 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 hover:text-white flex items-center justify-center text-sm transition-opacity shrink-0 cursor-pointer"
+                    className="opacity-0 group-hover:opacity-100 w-6 h-6 rounded-md bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 hover:text-white flex items-center justify-center text-xs transition-opacity shrink-0 cursor-pointer"
                   >
                     ›
                   </button>
@@ -577,16 +577,16 @@ export default function HomePortal() {
 
           {/* Card 2: National Vulnerability Database (NVD) Latest Vulnerability */}
           {vulnLoading && vulnItems.length === 0 ? (
-            <div className="flex flex-col gap-2 px-4 py-3 rounded-2xl bg-[#0d1017]/90 backdrop-blur-xl border border-white/[0.07] w-[385px] min-h-[90px]">
+            <div className="flex flex-col gap-1.5 px-3.5 py-2 rounded-2xl bg-[#0d1017]/90 backdrop-blur-xl border border-white/[0.07] min-h-[76px]">
               <div className="flex items-center justify-between">
-                <div className="h-2.5 w-24 bg-white/[0.08] rounded animate-pulse" />
-                <div className="h-2 w-16 bg-white/[0.06] rounded animate-pulse" />
+                <div className="h-2 w-20 bg-white/[0.08] rounded animate-pulse" />
+                <div className="h-2 w-14 bg-white/[0.06] rounded animate-pulse" />
               </div>
-              <div className="flex items-center gap-3.5">
-                <div className="w-[50px] h-[50px] rounded-xl bg-white/[0.06] animate-pulse shrink-0" />
-                <div className="flex-1 space-y-1.5">
-                  <div className="h-3 w-full bg-white/[0.06] rounded animate-pulse" />
-                  <div className="h-3 w-3/4 bg-white/[0.06] rounded animate-pulse" />
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-xl bg-white/[0.06] animate-pulse shrink-0" />
+                <div className="flex-1 space-y-1">
+                  <div className="h-2.5 w-full bg-white/[0.06] rounded animate-pulse" />
+                  <div className="h-2.5 w-3/4 bg-white/[0.06] rounded animate-pulse" />
                 </div>
               </div>
             </div>
@@ -598,20 +598,20 @@ export default function HomePortal() {
               onClick={(e) => {
                 if (!vulnItems[vulnIndex]?.url) e.preventDefault();
               }}
-              className="group relative flex flex-col gap-2 px-4 py-3 rounded-2xl bg-[#0d1017]/90 backdrop-blur-xl border border-white/[0.08] hover:border-rose-500/35 shadow-xl transition-all duration-200 w-[385px] min-h-[90px] cursor-pointer"
+              className="group relative flex flex-col gap-1.5 px-3.5 py-2 rounded-2xl bg-[#0d1017]/90 backdrop-blur-xl border border-white/[0.08] hover:border-rose-500/35 shadow-xl transition-all duration-200 min-h-[76px] cursor-pointer"
             >
               {/* Heading */}
-              <div className="flex items-center justify-between text-[10px] font-bold tracking-wider uppercase">
+              <div className="flex items-center justify-between text-[9.5px] font-bold tracking-wider uppercase">
                 <div className="flex items-center gap-1.5 text-rose-400">
                   <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse" />
                   <span>CVE Vulnerability</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[9.5px] font-mono font-bold text-slate-300">
+                  <span className="text-[9px] font-mono font-bold text-slate-300">
                     {vulnItems[vulnIndex].cveId}
                   </span>
                   <span
-                    className={`text-[8.5px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded leading-none ${
+                    className={`text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded leading-none ${
                       vulnItems[vulnIndex].severity === "CRITICAL"
                         ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
                         : vulnItems[vulnIndex].severity === "HIGH"
@@ -627,9 +627,9 @@ export default function HomePortal() {
               </div>
 
               {/* Content */}
-              <div className="flex items-center gap-3.5">
+              <div className="flex items-center gap-3">
                 <div
-                  className={`w-[50px] h-[50px] rounded-xl border shrink-0 flex flex-col items-center justify-center transition-colors shadow-sm ${
+                  className={`w-11 h-11 rounded-xl border shrink-0 flex flex-col items-center justify-center transition-colors shadow-sm ${
                     vulnItems[vulnIndex].severity === "CRITICAL"
                       ? "bg-rose-500/15 border-rose-500/40 text-rose-400"
                       : vulnItems[vulnIndex].severity === "HIGH"
@@ -640,7 +640,7 @@ export default function HomePortal() {
                   }`}
                 >
                   <svg
-                    className="w-5 h-5 mb-0.5"
+                    className="w-4 h-4 mb-0.5"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -652,14 +652,14 @@ export default function HomePortal() {
                       d="M12 9v3.75m0-10.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285zM12 16.5h.008v.008H12v-.008z"
                     />
                   </svg>
-                  <span className="text-[9px] font-mono font-black tracking-tight leading-none uppercase">
+                  <span className="text-[8.5px] font-mono font-black tracking-tight leading-none uppercase">
                     {vulnItems[vulnIndex].score !== null
                       ? vulnItems[vulnIndex].score
                       : "NVD"}
                   </span>
                 </div>
 
-                <p className="text-[12.5px] font-medium text-slate-200 group-hover:text-white leading-snug line-clamp-2 flex-1 transition-colors">
+                <p className="text-[12px] font-medium text-slate-200 group-hover:text-white leading-snug line-clamp-2 flex-1 transition-colors">
                   {vulnItems[vulnIndex].title}
                 </p>
 
@@ -672,7 +672,7 @@ export default function HomePortal() {
                       e.stopPropagation();
                       setVulnIndex((prev) => (prev + 1) % vulnItems.length);
                     }}
-                    className="opacity-0 group-hover:opacity-100 w-7 h-7 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 hover:text-white flex items-center justify-center text-sm transition-opacity shrink-0 cursor-pointer"
+                    className="opacity-0 group-hover:opacity-100 w-6 h-6 rounded-md bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 hover:text-white flex items-center justify-center text-xs transition-opacity shrink-0 cursor-pointer"
                   >
                     ›
                   </button>
@@ -683,16 +683,16 @@ export default function HomePortal() {
 
           {/* Card 3: Global AI News (NewsAPI.ai) */}
           {aiNewsLoading && aiNewsItems.length === 0 ? (
-            <div className="flex flex-col gap-2 px-4 py-3 rounded-2xl bg-[#0d1017]/90 backdrop-blur-xl border border-white/[0.07] w-[385px] min-h-[90px]">
+            <div className="flex flex-col gap-1.5 px-3.5 py-2 rounded-2xl bg-[#0d1017]/90 backdrop-blur-xl border border-white/[0.07] min-h-[76px]">
               <div className="flex items-center justify-between">
-                <div className="h-2.5 w-24 bg-white/[0.08] rounded animate-pulse" />
-                <div className="h-2 w-14 bg-white/[0.06] rounded animate-pulse" />
+                <div className="h-2 w-20 bg-white/[0.08] rounded animate-pulse" />
+                <div className="h-2 w-12 bg-white/[0.06] rounded animate-pulse" />
               </div>
-              <div className="flex items-center gap-3.5">
-                <div className="w-[50px] h-[50px] rounded-xl bg-white/[0.06] animate-pulse shrink-0" />
-                <div className="flex-1 space-y-1.5">
-                  <div className="h-3 w-full bg-white/[0.06] rounded animate-pulse" />
-                  <div className="h-3 w-3/4 bg-white/[0.06] rounded animate-pulse" />
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-xl bg-white/[0.06] animate-pulse shrink-0" />
+                <div className="flex-1 space-y-1">
+                  <div className="h-2.5 w-full bg-white/[0.06] rounded animate-pulse" />
+                  <div className="h-2.5 w-3/4 bg-white/[0.06] rounded animate-pulse" />
                 </div>
               </div>
             </div>
@@ -704,27 +704,27 @@ export default function HomePortal() {
               onClick={(e) => {
                 if (!aiNewsItems[aiNewsIndex]?.url) e.preventDefault();
               }}
-              className="group relative flex flex-col gap-2 px-4 py-3 rounded-2xl bg-[#0d1017]/90 backdrop-blur-xl border border-white/[0.08] hover:border-purple-500/35 shadow-xl transition-all duration-200 w-[385px] min-h-[90px] cursor-pointer"
+              className="group relative flex flex-col gap-1.5 px-3.5 py-2 rounded-2xl bg-[#0d1017]/90 backdrop-blur-xl border border-white/[0.08] hover:border-purple-500/35 shadow-xl transition-all duration-200 min-h-[76px] cursor-pointer"
             >
               {/* Heading */}
-              <div className="flex items-center justify-between text-[10px] font-bold tracking-wider uppercase">
+              <div className="flex items-center justify-between text-[9.5px] font-bold tracking-wider uppercase">
                 <div className="flex items-center gap-1.5 text-purple-400">
                   <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />
                   <span>Global AI News</span>
                 </div>
-                <span className="text-[9px] font-mono text-purple-300/80 bg-purple-500/15 border border-purple-500/25 px-1.5 py-0.2 rounded">
+                <span className="text-[8.5px] font-mono text-purple-300/80 bg-purple-500/15 border border-purple-500/25 px-1.5 py-0.2 rounded">
                   {aiNewsItems[aiNewsIndex].source || "NewsAPI.ai"}
                 </span>
               </div>
 
               {/* Content */}
-              <div className="flex items-center gap-3.5">
+              <div className="flex items-center gap-3">
                 <img
                   src={aiNewsItems[aiNewsIndex].image}
                   alt=""
-                  className="w-[50px] h-[50px] rounded-xl object-cover border border-white/[0.08] shrink-0 bg-slate-900 shadow-sm"
+                  className="w-11 h-11 rounded-xl object-cover border border-white/[0.08] shrink-0 bg-slate-900 shadow-sm"
                 />
-                <p className="text-[12.5px] font-medium text-slate-200 group-hover:text-white leading-snug line-clamp-2 flex-1 transition-colors">
+                <p className="text-[12px] font-medium text-slate-200 group-hover:text-white leading-snug line-clamp-2 flex-1 transition-colors">
                   {aiNewsItems[aiNewsIndex].title}
                 </p>
                 {aiNewsItems.length > 1 && (
@@ -736,7 +736,7 @@ export default function HomePortal() {
                       e.stopPropagation();
                       setAiNewsIndex((prev) => (prev + 1) % aiNewsItems.length);
                     }}
-                    className="opacity-0 group-hover:opacity-100 w-7 h-7 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 hover:text-white flex items-center justify-center text-sm transition-opacity shrink-0 cursor-pointer"
+                    className="opacity-0 group-hover:opacity-100 w-6 h-6 rounded-md bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 hover:text-white flex items-center justify-center text-xs transition-opacity shrink-0 cursor-pointer"
                   >
                     ›
                   </button>
@@ -747,7 +747,7 @@ export default function HomePortal() {
         </div>
 
         {/* TOP-CENTER: Dynamic Island Notch */}
-        <div className="flex justify-center flex-1 lg:flex-none">
+        <div className="flex justify-center flex-1 lg:flex-none pointer-events-auto">
           <div
             onMouseEnter={() => setNotchHovered(true)}
             onMouseLeave={() => setNotchHovered(false)}
@@ -860,13 +860,13 @@ export default function HomePortal() {
         </div>
 
         {/* TOP-RIGHT: Market Dock (Large Icons + Price, Hover Tooltip) */}
-        <div className="hidden sm:flex items-center gap-2.5">
+        <div className="hidden sm:flex items-center gap-2 pointer-events-auto">
           {/* BTC */}
           <div
             onClick={fetchMarkets}
-            className="group relative flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-[#0d1017]/85 backdrop-blur-xl border border-white/[0.08] hover:border-amber-500/40 shadow-xl transition cursor-pointer"
+            className="group relative flex items-center gap-2 px-2.5 py-1.5 rounded-2xl bg-[#0d1017]/85 backdrop-blur-xl border border-white/[0.08] hover:border-amber-500/40 shadow-xl transition cursor-pointer"
           >
-            <span className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 font-mono font-bold text-base">
+            <span className="w-7 h-7 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 font-mono font-bold text-sm">
               ₿
             </span>
             <span className="text-xs font-bold font-mono tabular-nums text-white">
@@ -880,11 +880,11 @@ export default function HomePortal() {
           {/* CRUDE OIL */}
           <div
             onClick={fetchMarkets}
-            className="group relative flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-[#0d1017]/85 backdrop-blur-xl border border-white/[0.08] hover:border-sky-500/40 shadow-xl transition cursor-pointer"
+            className="group relative flex items-center gap-2 px-2.5 py-1.5 rounded-2xl bg-[#0d1017]/85 backdrop-blur-xl border border-white/[0.08] hover:border-sky-500/40 shadow-xl transition cursor-pointer"
           >
-            <span className="w-8 h-8 rounded-xl bg-sky-500/15 border border-sky-500/30 flex items-center justify-center text-sky-400">
+            <span className="w-7 h-7 rounded-lg bg-sky-500/15 border border-sky-500/30 flex items-center justify-center text-sky-400">
               <svg
-                className="w-4 h-4"
+                className="w-3.5 h-3.5"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -910,9 +910,9 @@ export default function HomePortal() {
           {/* USD TO PKR */}
           <div
             onClick={fetchMarkets}
-            className="group relative flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-[#0d1017]/85 backdrop-blur-xl border border-white/[0.08] hover:border-emerald-500/40 shadow-xl transition cursor-pointer"
+            className="group relative flex items-center gap-2 px-2.5 py-1.5 rounded-2xl bg-[#0d1017]/85 backdrop-blur-xl border border-white/[0.08] hover:border-emerald-500/40 shadow-xl transition cursor-pointer"
           >
-            <span className="w-8 h-8 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-mono font-bold text-sm">
+            <span className="w-7 h-7 rounded-lg bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-mono font-bold text-xs">
               ₨
             </span>
             <span className="text-xs font-bold font-mono tabular-nums text-white">
@@ -926,15 +926,15 @@ export default function HomePortal() {
       </header>
 
       {/* CENTER HUB: Minimal Clock + Weather & Playful Emoji Launcher */}
-      <main className="flex-1 max-w-4xl w-full mx-auto px-4 flex flex-col items-center justify-center gap-10 py-6">
+      <main className="flex-1 max-w-2xl w-full mx-auto px-4 flex flex-col items-center justify-center gap-3.5 sm:gap-4.5 py-1 z-10 lg:-mt-36 xl:-mt-40">
         {/* Clean Centered Time & Compact Weather Pill */}
-        <div className="flex flex-col items-center text-center gap-3">
-          <div className="text-5xl sm:text-7xl font-black text-white tracking-tight font-mono tabular-nums drop-shadow-2xl">
+        <div className="flex flex-col items-center text-center gap-1.5 sm:gap-2">
+          <div className="text-4xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight font-mono tabular-nums drop-shadow-2xl leading-none">
             {timeString || "00:00:00 AM"}
           </div>
 
-          <div className="flex items-center gap-2.5 flex-wrap justify-center">
-            <span className="px-3 py-1 rounded-full bg-[#0d1017]/80 border border-white/[0.08] text-xs font-medium text-slate-300">
+          <div className="flex items-center gap-2 flex-wrap justify-center">
+            <span className="px-2.5 py-0.5 rounded-full bg-[#0d1017]/80 border border-white/[0.08] text-[11px] font-medium text-slate-300">
               {dateString || "..."}
             </span>
 
@@ -943,7 +943,7 @@ export default function HomePortal() {
                 type="button"
                 onClick={fetchWeather}
                 title="Click to refresh weather"
-                className="flex items-center gap-2 px-3 py-1 rounded-full bg-[#0d1017]/80 hover:bg-white/[0.06] border border-white/[0.08] text-xs text-slate-200 transition cursor-pointer"
+                className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#0d1017]/80 hover:bg-white/[0.06] border border-white/[0.08] text-[11px] text-slate-200 transition cursor-pointer"
               >
                 <span>{weather.emoji}</span>
                 <span className="font-mono font-bold">{weather.temp}°C</span>
@@ -957,12 +957,12 @@ export default function HomePortal() {
 
         {/* PLAYFUL SLEEPING -> VOMITING EMOJI LAUNCHER */}
         {!isWorkspaceAwake ? (
-          <div className="flex flex-col items-center justify-center py-2">
+          <div className="flex flex-col items-center justify-center py-1">
             <button
               type="button"
               onClick={() => setIsWorkspaceAwake(true)}
               aria-label="Wake workspace"
-              className="group relative flex items-center justify-center w-28 h-28 sm:w-32 sm:h-32 rounded-full cursor-pointer focus:outline-none"
+              className="group relative flex items-center justify-center w-20 h-20 sm:w-22 sm:h-22 rounded-full cursor-pointer focus:outline-none"
             >
               <span className="pointer-events-none absolute inset-0 rounded-full bg-blue-500/15 blur-2xl group-hover:bg-orange-500/20 transition-all duration-300" />
 
@@ -983,17 +983,17 @@ export default function HomePortal() {
 
               <span
                 style={{ animation: "sleep-breathe 3.2s ease-in-out infinite" }}
-                className="text-7xl sm:text-8xl filter drop-shadow-[0_18px_35px_rgba(0,0,0,0.85)] group-hover:hidden transition-transform duration-200"
+                className="text-5xl sm:text-6xl filter drop-shadow-[0_14px_28px_rgba(0,0,0,0.85)] group-hover:hidden transition-transform duration-200"
               >
                 😴
               </span>
-              <span className="hidden group-hover:inline-block text-7xl sm:text-8xl filter drop-shadow-[0_18px_35px_rgba(0,0,0,0.85)] scale-110 active:scale-95 transition-transform duration-200">
+              <span className="hidden group-hover:inline-block text-5xl sm:text-6xl filter drop-shadow-[0_14px_28px_rgba(0,0,0,0.85)] scale-110 active:scale-95 transition-transform duration-200">
                 🙄
               </span>
             </button>
           </div>
         ) : (
-          <div className="flex flex-col items-center justify-center w-full gap-6">
+          <div className="flex flex-col items-center justify-center w-full gap-3 sm:gap-4">
             <button
               type="button"
               onClick={() => {
@@ -1008,13 +1008,13 @@ export default function HomePortal() {
               className="group relative flex items-center justify-center cursor-pointer focus:outline-none"
             >
               <span className="pointer-events-none absolute inset-0 rounded-full bg-emerald-500/20 blur-2xl" />
-              <span className="text-6xl sm:text-7xl filter drop-shadow-[0_14px_28px_rgba(0,0,0,0.85)] group-hover:scale-110 active:scale-95 transition-transform duration-200">
+              <span className="text-5xl sm:text-6xl filter drop-shadow-[0_12px_24px_rgba(0,0,0,0.85)] group-hover:scale-110 active:scale-95 transition-transform duration-200">
                 🤮
               </span>
             </button>
 
             {/* Sleek Glass Workspace Dock (6 Icons + Short Titles Only) */}
-            <div className="px-6 py-5 rounded-3xl bg-[#0d1017]/80 backdrop-blur-2xl border border-white/[0.08] shadow-[0_24px_60px_rgba(0,0,0,0.75)] flex flex-wrap items-center justify-center gap-5 sm:gap-8 [perspective:900px]">
+            <div className="px-5 py-3 rounded-2xl bg-[#0d1017]/85 backdrop-blur-2xl border border-white/[0.08] shadow-[0_18px_45px_rgba(0,0,0,0.7)] flex flex-wrap items-center justify-center gap-3.5 sm:gap-5 [perspective:900px]">
               {[
                 {
                   href: "/projects",
@@ -1074,28 +1074,28 @@ export default function HomePortal() {
                       animation: `icon-spew 0.4s cubic-bezier(0.22, 1, 0.36, 1) ${item.delay} both`,
                     } as React.CSSProperties
                   }
-                  className="group flex flex-col items-center gap-2 cursor-pointer focus:outline-none"
+                  className="group flex flex-col items-center gap-1.5 cursor-pointer focus:outline-none"
                 >
                   <div
                     style={{
                       transform: "rotateX(var(--rx)) rotateY(var(--ry))",
                     }}
-                    className={`relative overflow-hidden w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-[#141824] border border-white/[0.09] group-hover:border-orange-500/60 group-hover:bg-[#1a2030] flex items-center justify-center shadow-xl group-hover:-translate-y-2 group-hover:scale-105 active:scale-95 transition-all duration-200 ${
+                    className={`relative overflow-hidden w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-[#141824] border border-white/[0.09] group-hover:border-orange-500/60 group-hover:bg-[#1a2030] flex items-center justify-center shadow-xl group-hover:-translate-y-1 group-hover:scale-105 active:scale-95 transition-all duration-200 ${
                       item.isMono
-                        ? "text-xl sm:text-2xl font-mono font-black text-emerald-400"
-                        : "text-2xl sm:text-3xl"
+                        ? "text-lg sm:text-xl font-mono font-black text-emerald-400"
+                        : "text-xl sm:text-2xl"
                     }`}
                   >
                     <span
                       className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
                       style={{
                         background:
-                          "radial-gradient(56px circle at var(--ix, 50%) var(--iy, 50%), rgba(255,255,255,0.18), transparent 70%)",
+                          "radial-gradient(48px circle at var(--ix, 50%) var(--iy, 50%), rgba(255,255,255,0.18), transparent 70%)",
                       }}
                     />
                     <span className="relative z-10">{item.icon}</span>
                   </div>
-                  <span className="text-xs font-medium text-slate-400 group-hover:text-white transition-colors">
+                  <span className="text-[11px] font-medium text-slate-400 group-hover:text-white transition-colors">
                     {item.label}
                   </span>
                 </Link>
@@ -1105,7 +1105,7 @@ export default function HomePortal() {
         )}
       </main>
 
-      <div className="h-4" />
+      <div className="h-2" />
     </div>
   );
 }

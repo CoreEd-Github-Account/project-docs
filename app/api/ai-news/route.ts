@@ -149,3 +149,4 @@ export async function GET(request: Request) {
     updatedAt: new Date().toISOString(),
   });
 }
+
